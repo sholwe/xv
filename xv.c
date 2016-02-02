@@ -62,6 +62,19 @@ static Atom   __SWM_VROOT = None;
 
 static char   basefname[128];   /* just the current fname, no path */
 
+#ifdef TV_L10N
+#  ifndef TV_FONTSET
+#    define TV_FONTSET "-*-fixed-medium-r-normal--%d-*"
+#  endif
+#  ifndef TV_FONTSIZE
+#    define TV_FONTSIZE 14,16
+#  endif
+
+static int    mfontsize[] = { TV_FONTSIZE, 0 };
+static char   mfontset[256];
+#endif
+
+
 /* things to do upon successfully loading an image */
 static int    autoraw    = 0;   /* force raw if using stdcmap */
 static int    autodither = 0;   /* dither */
@@ -78,6 +91,12 @@ static int    autohisteq = 0;   /* Histogram equalization */
 
 static int    force8     = 0;   /* force 8-bit mode */
 static int    force24    = 0;   /* force 24-bit mode */
+#ifdef HAVE_PCD
+static int    PcdSize    = -1;  /* force dialog to ask */
+#endif
+
+static float  waitsec_nonfinal = -1;  /* "normal" waitsec value */
+static float  waitsec_final = -1;     /* final-image waitsec value */
 
 /* used in DeleteCmd() and Quit() */
 static char  **mainargv;
@@ -103,7 +122,6 @@ static void openNextQuit             PARM((void));
 static void openNextLoop             PARM((void));
 static void openPrevPic              PARM((void));
 static void openNamedPic             PARM((void));
-static int  findRandomPic            PARM((void));
 static void mainLoop                 PARM((void));
 static void createMainWindow         PARM((char *, char *));
 static void setWinIconNames          PARM((char *));
@@ -120,15 +138,16 @@ static void add_filelist_to_namelist PARM((char *, char **, int *, int));
 int   imap, ctrlmap, gmap, browmap, cmtmap, clrroot, nopos, limit2x;
 char *display, *whitestr, *blackstr, *histr, *lostr,
      *infogeom, *fgstr, *bgstr, *ctrlgeom, *gamgeom, *browgeom, *tmpstr;
-char *rootfgstr, *rootbgstr, *visualstr, *textgeom, *cmtgeom;
+char *rootfgstr, *rootbgstr, *imagebgstr, *visualstr, *textgeom, *cmtgeom;
 char *monofontname, *flistName;
+#ifdef TV_L10N
+char **misscharset, *defstr;
+int nmisscharset;
+#endif
 int  curstype, stdinflag, browseMode, savenorm, preview, pscomp, preset,
      rmodeset, gamset, cgamset, perfect, owncmap, rwcolor, stdcmap;
 int  nodecor;
 double gamval, rgamval, ggamval, bgamval;
-
-
-
 
 /*******************************************/
 int main(argc, argv)
@@ -137,6 +156,9 @@ int main(argc, argv)
 /*******************************************/
 {
   int    i;
+#ifdef TV_L10N
+  int    j;
+#endif
   XColor ecdef;
   Window rootReturn, parentReturn, *children;
   unsigned int numChildren, rootDEEP;
@@ -153,6 +175,13 @@ int main(argc, argv)
   /*** variable Initialization                       ***/
   /*****************************************************/
 
+#ifdef TV_L10N
+  /* setlocale(LC_ALL, localeList[LOCALE_EUCJ]); */
+  setlocale(LC_ALL, "");
+  xlocale = (int)XSupportsLocale();	/* assume that (Bool) is (int) */
+	/* if X doesn't support ja_JP.ujis text viewer l10n doesn't work. */
+#endif
+
   xv_getwd(initdir, sizeof(initdir));
   searchdir[0] = '\0';
   fullfname[0] = '\0';
@@ -162,7 +191,7 @@ int main(argc, argv)
 
   /* init internal variables */
   display = NULL;
-  fgstr = bgstr = rootfgstr = rootbgstr = NULL;
+  fgstr = bgstr = rootfgstr = rootbgstr = imagebgstr = NULL;
   histr = lostr = whitestr = blackstr = NULL;
   visualstr = monofontname = flistName = NULL;
   winTitle = NULL;
@@ -180,6 +209,7 @@ int main(argc, argv)
   autoclose = autoDelete = 0;
   cmapInGam = 0;
   grabDelay = 0;
+  startGrab = 0;
   showzoomcursor = 0;
   perfect = owncmap = stdcmap = rwcolor = 0;
 
@@ -228,6 +258,10 @@ int main(argc, argv)
     if (!tmpdir) FatalError("can't malloc 'tmpdir'\n");
     strcpy(tmpdir, tmpstr);
   }
+#ifdef AUTO_EXPAND
+  Vdinit();
+  vd_handler_setup();
+#endif
 
   /* init command-line options flags */
   infogeom = DEFINFOGEOM;  ctrlgeom = DEFCTRLGEOM;
@@ -238,7 +272,7 @@ int main(argc, argv)
   ninstall = 0;  fixedaspect = 0;  noFreeCols = nodecor = 0;
   DEBUG = 0;  bwidth = 2;
   nolimits = useroot = clrroot = noqcheck = 0;
-  waitsec = -1;  waitloop = 0;  automax = 0;
+  waitsec = waitsec_final = -1.0;  waitloop = 0;  automax = 0;
   rootMode = 0;  hsvmode = 0;
   rmodeset = gamset = cgamset = 0;
   nopos = limit2x = 0;
@@ -250,6 +284,10 @@ int main(argc, argv)
   pscomp = 0;
   preset = 0;
   viewonly = 0;
+
+#ifdef ENABLE_FIXPIX_SMOOTH
+  do_fixpix_smooth = 0;
+#endif
 
   /* init 'xormasks' array */
   xorMasks[0] = 0x01010101;
@@ -275,6 +313,24 @@ int main(argc, argv)
 
 #ifdef HAVE_TIFF
   tiffW = (Window) NULL;  tiffUp = 0;
+#endif
+
+#ifdef HAVE_PNG
+  pngW = (Window) NULL;  pngUp = 0;
+#endif
+
+  pcdW = (Window) NULL;  pcdUp = 0;
+
+#ifdef HAVE_PIC2
+  pic2W = (Window) NULL;  pic2Up = 0;
+#endif
+
+#ifdef HAVE_PCD
+  pcdW = (Window) NULL;  pcdUp = 0;
+#endif
+
+#ifdef HAVE_MGCSFX
+  mgcsfxW = (Window) NULL;  mgcsfxUp = 0;
 #endif
 
   imap = ctrlmap = gmap = browmap = cmtmap = 0;
@@ -303,13 +359,35 @@ int main(argc, argv)
   verifyArgs();
 
 
+#if 0
+#ifdef XVEXECPATH
+  /* set up path to search for external executables */
+  {
+    char *systempath = getenv("PATH");
+    char *xvexecpath = getenv("XVPATH");
+    if (xvexecpath == NULL) xvexecpath = XVEXECPATH;
+    /* FIXME: can systempath == NULL? */
+    strcat(systempath, ":");		/* FIXME: writing to mem we don't own */
+    strcat(systempath, xvexecpath);	/* FIXME: writing to mem we don't own */
+    /* FIXME:  was there supposed to be a setenv() call in here? */
+    if (DEBUG)
+      fprintf(stderr, "DEBUG: executable search path: %s\n", systempath);
+  }
+#endif
+#endif
+
+
   /*****************************************************/
   /*** X Setup                                       ***/
   /*****************************************************/
 
   theScreen = DefaultScreen(theDisp);
   theCmap   = DefaultColormap(theDisp, theScreen);
-  rootW     = RootWindow(theDisp,theScreen);
+  if (spec_window) {
+	rootW = spec_window;
+  } else {
+  	rootW = RootWindow(theDisp,theScreen);
+  }
   theGC     = DefaultGC(theDisp,theScreen);
   theVisual = DefaultVisual(theDisp,theScreen);
   ncells    = DisplayCells(theDisp, theScreen);
@@ -320,7 +398,7 @@ int main(argc, argv)
 
   rootDEEP = dispDEEP;
 
-  /* things dependant on theVisual:
+  /* things dependent on theVisual:
    *    dispDEEP, theScreen, rootW, ncells, theCmap, theGC,
    *    vrWIDE, dispWIDE, vrHIGH, dispHIGH, maxWIDE, maxHIGH
    */
@@ -500,6 +578,7 @@ int main(argc, argv)
   arrow     = XCreateFontCursor(theDisp,(u_int) curstype);
   cross     = XCreateFontCursor(theDisp,XC_crosshair);
   tcross    = XCreateFontCursor(theDisp,XC_tcross);
+  tlcorner  = XCreateFontCursor(theDisp,XC_top_left_corner);
   zoom      = XCreateFontCursor(theDisp,XC_sizing);
 
   {
@@ -573,6 +652,18 @@ int main(argc, argv)
       xvAllocColor(theDisp, theCmap, &ecdef))  rootfg = ecdef.pixel;
   if (rootbgstr && XParseColor(theDisp, theCmap, rootbgstr, &ecdef) &&
       xvAllocColor(theDisp, theCmap, &ecdef))  rootbg = ecdef.pixel;
+
+
+  /* GRR 19980308:  set up image bg color (for transparent images) */
+  have_imagebg = 0;
+  if (imagebgstr && XParseColor(theDisp, theCmap, imagebgstr, &ecdef) &&
+      xvAllocColor(theDisp, theCmap, &ecdef)) {
+    /* imagebg = ecdef.pixel; */
+    have_imagebg = 1;
+    imagebgR = ecdef.red;
+    imagebgG = ecdef.green;
+    imagebgB = ecdef.blue;
+  }
 
 
   /* set up hi/lo colors */
@@ -664,6 +755,61 @@ int main(argc, argv)
 
   monofont=monofinfo->fid;
 
+#ifdef TV_L10N
+  if (xlocale) {
+    i = 0;
+    while (mfontsize[i]) {
+      xlocale = 1;	/* True */
+
+      sprintf(mfontset, TV_FONTSET, mfontsize[i]);
+/*fprintf(stderr, "FontSet: %s\n", mfontset);*/
+
+      monofset = XCreateFontSet(theDisp, mfontset,
+				&misscharset, &nmisscharset, &defstr);
+#  if 0	/* not useful */
+      if (!monofset) {
+	/* the current locale is not supported */
+/*fprintf(stderr, "Current locale `%s' is not supported.\n", localeList[i]);*/
+	xlocale = 0;
+	break;
+      }
+#  endif
+/*fprintf(stderr, "# of misscharset in mfontsize[%d]: %d\n", i,nmisscharset);*/
+
+      for (j = 0; j < nmisscharset; j++) {
+	if (!strncmp(misscharset[j], "jisx0208", 8)) {
+	  /* font for JIS X 0208 is not found */
+	  xlocale = 0;
+	  break;
+	}
+      }
+
+      if (xlocale) {
+	monofsetinfo = XExtentsOfFontSet(monofset);
+	monofsetinfo->max_logical_extent.width = mfontsize[i];
+		/* correct size of TextViewer
+		   in case that JIS X 0208 is not found */
+	break;
+      }
+
+      i++;
+    } /* while (mfontsize[i]) */
+
+#  if 0
+    if (nmisscharset > 0) {
+      sprintf(str,"missing %d charset:\n", nmisscharset);
+      for (i = 0; i < nmisscharset; i++) {
+	sprintf(str, "%s\t%s\n", str, misscharset[i]);
+      }
+#    if 0
+      FatalError(str);
+#    else
+      fprintf(stderr, "%s", str);
+#    endif
+    }
+#  endif
+  }
+#endif	/* TV_L10N */
 
 
 
@@ -692,6 +838,18 @@ int main(argc, argv)
       numnames = 1;
     }
     else namelist[0] = NULL;
+  }
+  else if (randomShow) {
+    int i, j;
+    char *tmp;
+
+    srandom((int)time((time_t *)0));
+    for (i = numnames; i > 1; i--) {
+      j = random() % i;
+      tmp = namelist[i-1];
+      namelist[i-1] = namelist[j];
+      namelist[j] = tmp;
+    }
   }
 
   if (numnames) makeDispNames();
@@ -796,6 +954,25 @@ int main(argc, argv)
   XSetTransientForHint(theDisp, tiffW, dirW);
 #endif
 
+#ifdef HAVE_PNG
+  CreatePNGW();
+  XSetTransientForHint(theDisp, pngW, dirW);
+#endif
+
+#ifdef HAVE_PCD
+  CreatePCDW();
+  XSetTransientForHint(theDisp, pcdW, dirW);
+#endif
+
+#ifdef HAVE_PIC2
+  CreatePIC2W();
+  XSetTransientForHint(theDisp, pic2W, dirW);
+#endif
+
+#ifdef HAVE_MGCSFX
+  CreateMGCSFXW();
+  XSetTransientForHint(theDisp, mgcsfxW, dirW);
+#endif
 
   LoadFishCursors();
   SetCursors(-1);
@@ -964,7 +1141,11 @@ static void useOtherVisual(vinfo, best)
 
   dispDEEP  = vinfo[best].depth;
   theScreen = vinfo[best].screen;
-  rootW     = RootWindow(theDisp, theScreen);
+  if (spec_window) {
+	rootW = spec_window;
+  } else {
+  	rootW = RootWindow(theDisp,theScreen);
+  }
   ncells    = vinfo[best].colormap_size;
   theCmap   = XCreateColormap(theDisp, rootW, theVisual, AllocNone);
 
@@ -1095,6 +1276,9 @@ static void parseResources(argc, argv)
 
   if (rd_str ("fileList"))       flistName   = def_str;
   if (rd_flag("fixed"))          fixedaspect = def_int;
+#ifdef ENABLE_FIXPIX_SMOOTH
+  if (rd_flag("fixpix"))         do_fixpix_smooth = def_int;
+#endif
   if (rd_flag("force8"))         force8      = def_int;
   if (rd_flag("force24"))        force24     = def_int;
   if (rd_str ("foreground"))     fgstr       = def_str;
@@ -1106,21 +1290,37 @@ static void parseResources(argc, argv)
   if (rd_str ("highlight"))      histr       = def_str;
   if (rd_str ("iconGeometry"))   icongeom    = def_str;
   if (rd_flag("iconic"))         startIconic = def_int;
+  if (rd_str ("imageBackground")) imagebgstr = def_str;
   if (rd_str ("infoGeometry"))   infogeom    = def_str;
   if (rd_flag("infoMap"))        imap        = def_int;
   if (rd_flag("loadBrowse"))     browseMode  = def_int;
   if (rd_str ("lowlight"))       lostr       = def_str;
+#ifdef MACBINARY
+  if (rd_flag("macbinary"))      handlemacb  = def_int;
+#endif
+#ifdef HAVE_MGCSFX
+  if (rd_flag("mgcsfx"))         mgcsfx      = def_int;
+#endif
   if (rd_flag("mono"))           mono        = def_int;
   if (rd_str ("monofont"))       monofontname = def_str;
   if (rd_int ("ncols"))          ncols       = def_int;
   if (rd_flag("ninstall"))       ninstall    = def_int;
   if (rd_flag("nodecor"))        nodecor     = def_int;
   if (rd_flag("nolimits"))       nolimits    = def_int;
+#ifdef HAVE_MGCSFX
+  if (rd_flag("nomgcsfx"))       nomgcsfx    = def_int;
+#endif
+#if defined(HAVE_PIC) || defined(HAVE_PIC2)
+  if (rd_flag("nopicadjust"))    nopicadjust = def_int;
+#endif
   if (rd_flag("nopos"))          nopos       = def_int;
   if (rd_flag("noqcheck"))       noqcheck    = def_int;
   if (rd_flag("nostat"))         nostat      = def_int;
   if (rd_flag("ownCmap"))        owncmap     = def_int;
   if (rd_flag("perfect"))        perfect     = def_int;
+#ifdef HAVE_PIC2
+  if (rd_flag("pic2split"))      pic2split   = def_int;
+#endif
   if (rd_flag("popupKludge"))    winCtrPosKludge = def_int;
   if (rd_str ("print"))          strncpy(printCmd, def_str,
 					 (size_t) PRINTCMDLEN);
@@ -1138,6 +1338,9 @@ static void parseResources(argc, argv)
   if (rd_str ("textviewGeometry")) textgeom  = def_str;
   if (rd_flag("useStdCmap"))     stdcmap     = def_int;
   if (rd_str ("visual"))         visualstr   = def_str;
+#ifdef VS_ADJUST
+  if (rd_flag("vsadjust"))       vsadjust    = def_int;
+#endif
   if (rd_flag("vsDisable"))      novbrowse   = def_int;
   if (rd_str ("vsGeometry"))     browgeom    = def_str;
   if (rd_flag("vsMap"))          browmap     = def_int;
@@ -1172,7 +1375,13 @@ static void parseCmdLine(argc, argv)
       }
 
       if (numnames<MAXNAMES) {
+#ifdef AUTO_EXPAND
+	if(Isarchive(argv[i]) == 0){ /* Not archive file */
+	  namelist[numnames++] = argv[i];
+	}
+#else
 	namelist[numnames++] = argv[i];
+#endif
 	if (numnames==MAXNAMES) {
 	  fprintf(stderr,"%s: too many filenames.  Only using first %d.\n",
 		  cmd, MAXNAMES);
@@ -1195,6 +1404,14 @@ static void parseCmdLine(argc, argv)
 	if (sscanf(argv[i],"%d:%d",&n,&d)!=2 || n<1 || d<1)
 	  fprintf(stderr,"%s: bad aspect ratio '%s'\n",cmd,argv[i]);
 	else defaspect = (float) n / (float) d;
+      }
+    }
+
+    else if (!argcmp(argv[i],"-windowid",3,0,&pm)) {
+      if (++i<argc) {
+	if (sscanf(argv[i], "%ld", &spec_window) != 1) {
+		fprintf(stderr,"%s: bad argument to -windowid '%s'\n",cmd,argv[i]);
+        }
       }
     }
 
@@ -1289,7 +1506,11 @@ static void parseCmdLine(argc, argv)
     else if (!argcmp(argv[i],"-fg",3,0,&pm))              /* fg color */
       { if (++i<argc) fgstr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-fixed",3,1,&fixedaspect)); /* fix asp. ratio */
+    else if (!argcmp(argv[i],"-fixed",5,1,&fixedaspect)); /* fix asp. ratio */
+
+#ifdef ENABLE_FIXPIX_SMOOTH
+    else if (!argcmp(argv[i],"-fixpix",5,1,&do_fixpix_smooth)); /* dithering */
+#endif
 
     else if (!argcmp(argv[i],"-flist",3,0,&pm))           /* file list */
       { if (++i<argc) flistName = argv[i]; }
@@ -1330,6 +1551,10 @@ static void parseCmdLine(argc, argv)
       { if (++i<argc) infogeom = argv[i]; }
 
     else if (!argcmp(argv[i],"-imap",     3,1,&imap));        /* imap */
+
+    else if (!argcmp(argv[i],"-ibg",3,0,&pm)) /* GRR: image background color */
+      { if (++i<argc) imagebgstr = argv[i]; }
+
     else if (!argcmp(argv[i],"-lbrowse",  3,1,&browseMode));  /* browse mode */
 
     else if (!argcmp(argv[i],"-lo",3,0,&pm))	        /* lowlight */
@@ -1354,8 +1579,16 @@ static void parseCmdLine(argc, argv)
     else if (!argcmp(argv[i],"-maxpect",5,1,&pm))       /* auto maximize */
       { automax=pm; fixedaspect=pm; }
 
+#ifdef MACBINARY
+    else if (!argcmp(argv[i],"-macbinary",3,1,&handlemacb)); /* macbinary */
+#endif
+
     else if (!argcmp(argv[i],"-mfn",3,0,&pm))           /* mono font name */
       { if (++i<argc) monofontname = argv[i]; }
+
+#ifdef HAVE_MGCSFX
+    else if (!argcmp(argv[i],"-mgcsfx", 4,1,&mgcsfx));  /* mgcsfx */
+#endif
 
     else if (!argcmp(argv[i],"-mono",3,1,&mono));	/* mono */
 
@@ -1365,17 +1598,30 @@ static void parseCmdLine(argc, argv)
     else if (!argcmp(argv[i],"-ncols",3,0,&pm))        /* ncols */
       { if (++i<argc) ncols=abs(atoi(argv[i])); }
 
-    else if (!argcmp(argv[i],"-ninstall",  3,1,&ninstall));   /* inst cmaps?*/
+    else if (!argcmp(argv[i],"-ninstall",  3,1,&ninstall));   /* inst cmaps? */
     else if (!argcmp(argv[i],"-nodecor",   4,1,&nodecor));
     else if (!argcmp(argv[i],"-nofreecols",4,1,&noFreeCols));
     else if (!argcmp(argv[i],"-nolimits",  4,1,&nolimits));   /* nolimits */
+#ifdef HAVE_MGCSFX
+    else if (!argcmp(argv[i],"-nomgcsfx", 4,1,&nomgcsfx));    /* nomgcsfx */
+#endif
+#if defined(HAVE_PIC) || defined(HAVE_PIC2)
+    else if (!argcmp(argv[i],"-nopicadjust", 4,1,&nopicadjust));/*nopicadjust*/
+#endif
     else if (!argcmp(argv[i],"-nopos",     4,1,&nopos));      /* nopos */
     else if (!argcmp(argv[i],"-noqcheck",  4,1,&noqcheck));   /* noqcheck */
-    else if (!argcmp(argv[i],"-noresetroot",5,1,&resetroot)); /* reset root*/
+    else if (!argcmp(argv[i],"-noresetroot",5,1,&resetroot)); /* reset root */
     else if (!argcmp(argv[i],"-norm",      5,1,&autonorm));   /* norm */
     else if (!argcmp(argv[i],"-nostat",    4,1,&nostat));     /* nostat */
     else if (!argcmp(argv[i],"-owncmap",   2,1,&owncmap));    /* own cmap */
+#ifdef HAVE_PCD
+    else if (!argcmp(argv[i],"-pcd",       4,0,&pm))         /* pcd with size */
+      { if (i+1<argc) PcdSize = atoi(argv[++i]); }
+#endif
     else if (!argcmp(argv[i],"-perfect",   3,1,&perfect));    /* -perfect */
+#ifdef HAVE_PIC2
+    else if (!argcmp(argv[i],"-pic2split", 3,1,&pic2split));  /* pic2split */
+#endif
     else if (!argcmp(argv[i],"-pkludge",   3,1,&winCtrPosKludge));
     else if (!argcmp(argv[i],"-poll",      3,1,&polling));    /* chk mod? */
 
@@ -1418,6 +1664,7 @@ static void parseCmdLine(argc, argv)
       conv24 = CONV24_SLOW;
 
     else if (!argcmp(argv[i],"-smooth",3,1,&autosmooth));  /* autosmooth */
+    else if (!argcmp(argv[i],"-startgrab",3,1,&startGrab)); /* startGrab */
     else if (!argcmp(argv[i],"-stdcmap",3,1,&stdcmap));    /* use stdcmap */
 
     else if (!argcmp(argv[i],"-tgeometry",2,0,&pm))	   /* textview geom */
@@ -1428,6 +1675,10 @@ static void parseCmdLine(argc, argv)
 
     else if (!argcmp(argv[i],"-visual",4,0,&pm))           /* visual */
       { if (++i<argc) visualstr = argv[i]; }
+
+#ifdef VS_ADJUST
+    else if (!argcmp(argv[i],"-vsadjust", 3,1,&vsadjust));  /* vsadjust */
+#endif
 
     else if (!argcmp(argv[i],"-vsdisable",4,1,&novbrowse)); /* disable sch? */
 
@@ -1440,8 +1691,9 @@ static void parseCmdLine(argc, argv)
 
     else if (!argcmp(argv[i],"-wait",3,0,&pm)) {        /* secs betwn pics */
       if (++i<argc) {
-	waitsec = abs(atoi(argv[i]));
-	if (waitsec<0) waitsec = 0;
+	char *comma = strchr(argv[i], ',');
+	waitsec_nonfinal = fabs(atof(argv[i]));
+	waitsec_final = comma? fabs(atof(comma+1)) : waitsec_nonfinal;
       }
     }
 
@@ -1467,7 +1719,11 @@ static void verifyArgs()
   /* check options for validity */
 
   if (strlen(searchdir)) {  /* got a search directory */
+#ifdef AUTO_EXPAND
+    if (Chvdir(searchdir)) {
+#else
     if (chdir(searchdir)) {
+#endif
       fprintf(stderr,"xv: unable to cd to directory '%s'.\n",searchdir);
       fprintf(stderr,
        "    Ignoring '-dir' option and/or 'xv.searchDirectory' resource\n");
@@ -1514,7 +1770,7 @@ static void verifyArgs()
     preset = 0;
   }
 
-  if (waitsec < 0) noFreeCols = 0;   /* disallow nfc if not doing slideshow */
+  if (waitsec < 0.0) noFreeCols = 0;   /* disallow nfc if not doing slideshow */
   if (noFreeCols && perfect) { perfect = 0;  owncmap = 1; }
 
   /* decide what default color allocation stuff we've settled on */
@@ -1556,6 +1812,20 @@ static void printoption(st)
 
 static void cmdSyntax()
 {
+  /* GRR 19980605:  added version info for most common libraries */
+  fprintf(stderr, "XV - %s.\n", REVDATE);
+#ifdef HAVE_JPEG
+  VersionInfoJPEG();
+#endif
+#ifdef HAVE_TIFF
+  VersionInfoTIFF();
+#endif
+#ifdef HAVE_PNG
+  VersionInfoPNG();
+#endif
+  /* pbm/pgm/ppm support is native, not via pbmplus/netpbm libraries */
+  fprintf(stderr, "\n");
+
   fprintf(stderr, "Usage:\n");
   printoption(cmd);
   printoption("[-]");
@@ -1595,6 +1865,9 @@ static void cmdSyntax()
   printoption("[-expand exp | hexp:vexp]");
   printoption("[-fg color]");
   printoption("[-/+fixed]");
+#ifdef ENABLE_FIXPIX_SMOOTH
+  printoption("[-/+fixpix]");
+#endif
   printoption("[-flist fname]");
   printoption("[-gamma val]");
   printoption("[-geometry geom]");
@@ -1607,6 +1880,7 @@ static void cmdSyntax()
   printoption("[-hi color]");
   printoption("[-/+hist]");
   printoption("[-/+hsv]");
+  printoption("[-ibg color]");  /* GRR 19980314 */
   printoption("[-icgeometry geom]");
   printoption("[-/+iconic]");
   printoption("[-igeometry geom]");
@@ -1614,9 +1888,15 @@ static void cmdSyntax()
   printoption("[-/+lbrowse]");
   printoption("[-lo color]");
   printoption("[-/+loadclear]");
+#ifdef MACBINARY
+  printoption("[-/+macbinary]");
+#endif
   printoption("[-/+max]");
   printoption("[-/+maxpect]");
   printoption("[-mfn font]");
+#ifdef HAVE_MGCSFX
+  printoption("[-/+mgcsfx]");
+#endif
   printoption("[-/+mono]");
   printoption("[-name str]");
   printoption("[-ncols #]");
@@ -1624,13 +1904,25 @@ static void cmdSyntax()
   printoption("[-/+nodecor]");
   printoption("[-/+nofreecols]");
   printoption("[-/+nolimits]");
+#ifdef HAVE_MGCSFX
+  printoption("[-/+nomgcsfx]");
+#endif
+#if defined(HAVE_PIC) || defined(HAVE_PIC2)
+  printoption("[-/+nopicadjust]");
+#endif
   printoption("[-/+nopos]");
   printoption("[-/+noqcheck]");
   printoption("[-/+noresetroot]");
   printoption("[-/+norm]");
   printoption("[-/+nostat]");
   printoption("[-/+owncmap]");
+#ifdef HAVE_PCD
+  printoption("[-pcd size(0=192*128,1,2,3,4=3072*2048)]");
+#endif
   printoption("[-/+perfect]");
+#ifdef HAVE_PIC2
+  printoption("[-/+pic2split]");
+#endif
   printoption("[-/+pkludge]");
   printoption("[-/+poll]");
   printoption("[-preset #]");
@@ -1649,17 +1941,22 @@ static void cmdSyntax()
   printoption("[-/+rw]");
   printoption("[-slow24]");
   printoption("[-/+smooth]");
+  printoption("[-/+startgrab]");
   printoption("[-/+stdcmap]");
   printoption("[-tgeometry geom]");
   printoption("[-/+vflip]");
   printoption("[-/+viewonly]");
   printoption("[-visual type]");
+#ifdef VS_ADJUST
+  printoption("[-/+vsadjust]");
+#endif
   printoption("[-/+vsdisable]");
   printoption("[-vsgeometry geom]");
   printoption("[-/+vsmap]");
   printoption("[-/+vsperfect]");
-  printoption("[-wait seconds]");
+  printoption("[-wait secs[,final_secs]]");
   printoption("[-white color]");
+  printoption("[-windowid windowid]");
   printoption("[-/+wloop]");
   printoption("[filename ...]");
   fprintf(stderr,"\n\n");
@@ -1682,6 +1979,7 @@ static void rmodeSyntax()
   fprintf(stderr,"\t7: centered on a 'brick' background\n");
   fprintf(stderr,"\t8: symmetrical tiling\n");
   fprintf(stderr,"\t9: symmetrical mirrored tiling\n");
+  fprintf(stderr,"\t10: upper left corner\n");
   fprintf(stderr,"\n");
   Quit(1);
 }
@@ -1694,7 +1992,7 @@ static int argcmp(a1, a2, minlen, plusallowed, plusminus)
      int *plusminus;
 {
   /* does a string compare between a1 and a2.  To return '0', a1 and a2
-     must match to the length of a2, and that length has to
+     must match to the length of a1, and that length has to
      be at least 'minlen'.  Otherwise, return non-zero.  plusminus set to '1'
      if '-option', '0' if '+option' */
 
@@ -1734,6 +2032,10 @@ static int openPic(filenum)
   char *tmp;
   char *fullname,       /* full name of the original file */
         filename[512];  /* full name of file to load (could be /tmp/xxx)*/
+#ifdef MACBINARY
+  char origname[512];	/* file name of original file (NO processing) */
+  origname[0] = '\0';
+#endif
 
   xvbzero((char *) &pinfo, sizeof(PICINFO));
 
@@ -1866,8 +2168,22 @@ static int openPic(filenum)
       frompipe = 1;
     }
   }
+#ifdef AUTO_EXPAND
+  else {
+    fullname = (char *) malloc(MAXPATHLEN+2);
+    strcpy(fullname, namelist[filenum]);
+    freename = 1;
+  }
+  tmp = (char *) rindex(fullname, '/');
+  if (tmp) {
+      *tmp = '\0';
+      Mkvdir(fullname);
+      *tmp = '/';
+  }
+  Dirtovd(fullname);
+#else
   else fullname = namelist[filenum];
-
+#endif
 
   strcpy(fullfname, fullname);
   tmp = BaseName(fullname);
@@ -1875,18 +2191,20 @@ static int openPic(filenum)
 
 
   /* chop off trailing ".Z", ".z", or ".gz" from displayed basefname, if any */
-  if (strlen(basefname) > (size_t) 2     &&
-      strcmp(basefname+strlen(basefname)-2,".Z")==0)
+  if (strlen(basefname)>2 && strcmp(basefname+strlen(basefname)-2,".Z")==0)
     basefname[strlen(basefname)-2]='\0';
   else {
 #ifdef GUNZIP
-    if (strlen(basefname)>2 && strcmp(basefname+strlen(basefname)-2,".Z")==0)
+    if (strlen(basefname)>2 && strcmp(basefname+strlen(basefname)-2,".z")==0)
       basefname[strlen(basefname)-2]='\0';
-
-    else if (strlen(basefname)>3 &&
-	     strcmp(basefname+strlen(basefname)-3,".gz")==0)
+    else
+    if (strlen(basefname)>3 && strcmp(basefname+strlen(basefname)-3,".gz")==0)
       basefname[strlen(basefname)-3]='\0';
-#endif /* GUNZIP */
+#endif
+#ifdef BUNZIP2
+    if (strlen(basefname)>4 && strcmp(basefname+strlen(basefname)-4,".bz2")==0)
+      basefname[strlen(basefname)-4]='\0';
+#endif
   }
 
 
@@ -1973,6 +2291,9 @@ static int openPic(filenum)
 
     if (strcmp(filename,STDINSTR)==0) {
       FILE *fp = NULL;
+#ifndef USE_MKSTEMP
+      int tmpfd;
+#endif
 
 #ifndef VMS
       sprintf(filename,"%s/xvXXXXXX",tmpdir);
@@ -1984,13 +2305,18 @@ static int openPic(filenum)
       fp = fdopen(mkstemp(filename), "w");
 #else
       mktemp(filename);
-      fp = fopen(filename, "w");
+      tmpfd = open(filename,O_WRONLY|O_CREAT|O_EXCL,S_IRWUSR);
+      if (tmpfd < 0) FatalError("openPic(): can't create temporary file");
+      fp = fdopen(tmpfd,"w");
 #endif
       if (!fp) FatalError("openPic(): can't write temporary file");
 
       clearerr(stdin);
       while ( (i=getchar()) != EOF) putc(i,fp);
       fclose(fp);
+#ifndef USE_MKSTEMP
+      close(tmpfd);
+#endif
 
       /* and remove it from list, since we can never reload from stdin */
       if (strcmp(namelist[0], STDINSTR)==0) deleteFromList(0);
@@ -2005,15 +2331,21 @@ static int openPic(filenum)
     (no pipes or stdin, though it could be compressed) to be loaded */
   filetype = ReadFileType(filename);
 
+#ifdef HAVE_MGCSFX
+  if (mgcsfx && filetype == RFT_UNKNOWN){ /* force use MgcSfx */
+    if(getInputCom() != 0) filetype = RFT_MGCSFX;
+  }
+#endif
 
-  if (filetype == RFT_COMPRESS) {   /* a compressed file.  uncompress it */
+  /* if it's a compressed file, uncompress it: */
+  if ((filetype == RFT_COMPRESS) || (filetype == RFT_BZIP2)) {
     char tmpname[128];
 
     if (
 #ifndef VMS
-	UncompressFile(filename, tmpname)
+	UncompressFile(filename, tmpname, filetype)
 #else
-	UncompressFile(basefname, tmpname)
+	UncompressFile(basefname, tmpname, filetype)
 #endif
 	) {
 
@@ -2029,6 +2361,57 @@ static int openPic(filenum)
     WaitCursor();
   }
 
+#ifdef MACBINARY
+  if (handlemacb && macb_file == True) {
+    char tmpname[128];
+
+    if (RemoveMacbinary(filename, tmpname)) {
+      if (strcmp(fullname,filename)!=0) unlink(filename);
+      strcpy(origname, filename);
+      strcpy(filename, tmpname);
+    }
+    else filetype = RFT_ERROR;
+
+    WaitCursor();
+  }
+#endif
+
+#ifdef HAVE_MGCSFX_AUTO
+  if (filetype == RFT_MGCSFX) {
+      char tmpname[128], tmp[256];
+      char *icom;
+
+      if ((icom = mgcsfx_auto_input_com(filename)) != NULL) {
+	sprintf(tmpname, "%s/xvmsautoXXXXXX", tmpdir);
+#ifdef USE_MKSTEMP
+	close(mkstemp(tmpname));
+#else
+	mktemp(tmpname);
+#endif
+	SetISTR(ISTR_INFO, "Converting to known format by MgcSfx auto...");
+	sprintf(tmp,"%s >%s", icom, tmpname);
+      }
+      else goto ms_auto_no;
+
+#ifndef VMS
+      if (system(tmp))
+#else
+      if (!system(tmp))
+#endif
+      {
+	SetISTR(ISTR_INFO, "Unable to convert '%s' by MgcSfx auto.",
+	  BaseName(filename));
+	Warning();
+	filetype = RFT_ERROR;
+	goto ms_auto_no;
+      }
+
+      filetype = ReadFileType(tmpname);
+      if (strcmp(fullname,filename)!=0) unlink(filename);
+      strcpy(filename, tmpname);
+  }
+ms_auto_no:
+#endif /* HAVE_MGCSFX_AUTO */
 
   if (filetype == RFT_ERROR) {
     char  foostr[512];
@@ -2042,10 +2425,16 @@ static int openPic(filenum)
 
   if (filetype == RFT_UNKNOWN) {
     /* view as a text/hex file */
-    TextView(filename);
+#ifdef MACBINARY
+    if (origname[0])
+      i = TextView(origname);
+    else
+#endif
+      i = TextView(filename);
     SetISTR(ISTR_INFO,"'%s' not in a recognized format.", basefname);
     /* Warning();  */
-    goto SHOWN_AS_TEXT;
+    if (i) goto SHOWN_AS_TEXT;
+    else   goto FAILED;
   }
 
   if (filetype < RFT_ERROR) {
@@ -2073,8 +2462,9 @@ static int openPic(filenum)
   if (filetype == RFT_XBM && (!i || pinfo.w==0 || pinfo.h==0)) {
     /* probably just a '.h' file or something... */
     SetISTR(ISTR_INFO," ");
-    TextView(filename);
-    goto SHOWN_AS_TEXT;
+    i = TextView(filename);
+    if (i) goto SHOWN_AS_TEXT;
+    else   goto FAILED;
   }
 
   if (!i) {
@@ -2209,12 +2599,15 @@ static int openPic(filenum)
   if (fullname && strcmp(fullname,filename)!=0) unlink(filename);
 
 
-  SetISTR(ISTR_INFO,formatStr);
+  SetISTR(ISTR_INFO, "%s", formatStr);
 
   SetInfoMode(INF_PART);
-  SetISTR(ISTR_FILENAME, "%s",
-	  (filenum==DFLTPIC || filenum==GRABBED || frompipe) ?
-	  "<none>" : basefname);
+  if (filenum==DFLTPIC || filenum==GRABBED || frompipe)
+    SetISTR(ISTR_FILENAME, "<none>");
+  else if (numPages > 1)
+    SetISTR(ISTR_FILENAME, "%s  Page %d of %d", basefname, curPage+1, numPages);
+  else
+    SetISTR(ISTR_FILENAME, "%s", basefname);
 
   SetISTR(ISTR_RES,"%d x %d",pWIDE,pHIGH);
   SetISTR(ISTR_COLOR, "");
@@ -2424,7 +2817,7 @@ static int openPic(filenum)
     if (autodither && ncols>0) epicMode = EM_DITH;
 
     /* if in CM_STDCMAP mode, and *not* in '-wait 0', then autodither */
-    if (colorMapMode == CM_STDCMAP && waitsec != 0) epicMode = EM_DITH;
+    if (colorMapMode == CM_STDCMAP && waitsec != 0.0) epicMode = EM_DITH;
 
     /* if -smooth or image has been shrunk to fit screen */
     if (autosmooth || (pWIDE >maxWIDE || pHIGH>maxHIGH)
@@ -2510,7 +2903,11 @@ static int openPic(filenum)
      to generate the correct exposes (particularly with 'BitGravity' turned
      on */
 
-  if (mainW && !useroot) GenExpose(mainW, 0, 0, (u_int) eWIDE, (u_int) eHIGH);
+  /*Brian T. Schellenberger: fix for X 4.2 refresh problem*/
+  if (mainW && !useroot) {
+    XSync(theDisp, False);
+    GenExpose(mainW, 0, 0, (u_int) eWIDE, (u_int) eHIGH);
+  }
 
   return 1;
 
@@ -2542,6 +2939,9 @@ static int openPic(filenum)
 }
 
 
+extern byte ZXheader[128];	/* [JCE] Spectrum screen magic number is
+                                  defined in xvzx.c */
+
 
 /********************************/
 int ReadFileType(fname)
@@ -2554,76 +2954,105 @@ int ReadFileType(fname)
 
   FILE *fp;
   byte  magicno[30];    /* first 30 bytes of file */
-  int   rv, n;
+  int   rv=RFT_UNKNOWN, n;
+#ifdef MACBINARY
+  int macbin_alrchk = False;
+#endif
 
   if (!fname) return RFT_ERROR;   /* shouldn't happen */
 
   fp = xv_fopen(fname, "r");
   if (!fp) return RFT_ERROR;
 
+  if (strlen(fname) > 4 &&
+      strcasecmp(fname+strlen(fname)-5, ".wbmp")==0)          rv = RFT_WBMP;
+
   n = fread(magicno, (size_t) 1, (size_t) 30, fp);
   fclose(fp);
 
-  if (n<30) return RFT_UNKNOWN;    /* files less than 30 bytes long... */
+  if (n<30) return rv;    /* files less than 30 bytes long... */
 
-  rv = RFT_UNKNOWN;
+#ifdef MACBINARY
+  macb_file = False;
+  while (1) {
+#endif
 
-  if (strncmp((char *) magicno,"GIF87a", (size_t) 6)==0 ||
-      strncmp((char *) magicno,"GIF89a", (size_t) 6)==0)        rv = RFT_GIF;
+#ifdef HAVE_MGCSFX
+  if (is_mgcsfx(fname, magicno, 30) != 0) rv = RFT_MGCSFX;
+  else
+#endif
+       if (strncmp((char *) magicno,"GIF87a", (size_t) 6)==0 ||
+	   strncmp((char *) magicno,"GIF89a", (size_t) 6)==0) rv = RFT_GIF;
 
   else if (strncmp((char *) magicno,"VIEW", (size_t) 4)==0 ||
-	   strncmp((char *) magicno,"WEIV", (size_t) 4)==0)     rv = RFT_PM;
+	   strncmp((char *) magicno,"WEIV", (size_t) 4)==0)   rv = RFT_PM;
+
+#ifdef HAVE_PIC2
+  else if (magicno[0]=='P' && magicno[1]=='2' &&
+	   magicno[2]=='D' && magicno[3]=='T')                rv = RFT_PIC2;
+#endif
 
   else if (magicno[0] == 'P' && magicno[1]>='1' &&
-	   magicno[1]<='6')                             rv = RFT_PBM;
+	   (magicno[1]<='6' || magicno[1]=='8'))              rv = RFT_PBM;
 
   /* note: have to check XPM before XBM, as first 2 chars are the same */
   else if (strncmp((char *) magicno, "/* XPM */", (size_t) 9)==0) rv = RFT_XPM;
 
   else if (strncmp((char *) magicno,"#define", (size_t) 7)==0 ||
-	   (magicno[0] == '/' && magicno[1] == '*'))    rv = RFT_XBM;
+	   (magicno[0] == '/' && magicno[1] == '*'))          rv = RFT_XBM;
 
   else if (magicno[0]==0x59 && (magicno[1]&0x7f)==0x26 &&
-	   magicno[2]==0x6a && (magicno[3]&0x7f)==0x15) rv = RFT_SUNRAS;
+	   magicno[2]==0x6a && (magicno[3]&0x7f)==0x15)       rv = RFT_SUNRAS;
 
-  else if (magicno[0] == 'B' && magicno[1] == 'M')      rv = RFT_BMP;
+  else if (magicno[0] == 'B' && magicno[1] == 'M')            rv = RFT_BMP;
 
-  else if (magicno[0]==0x52 && magicno[1]==0xcc)        rv = RFT_UTAHRLE;
+  else if (magicno[0]==0x52 && magicno[1]==0xcc)              rv = RFT_UTAHRLE;
 
   else if ((magicno[0]==0x01 && magicno[1]==0xda) ||
-	   (magicno[0]==0xda && magicno[1]==0x01))      rv = RFT_IRIS;
+	   (magicno[0]==0xda && magicno[1]==0x01))            rv = RFT_IRIS;
 
-  else if (magicno[0]==0x1f && magicno[1]==0x9d)        rv = RFT_COMPRESS;
+  else if (magicno[0]==0x1f && magicno[1]==0x9d)              rv = RFT_COMPRESS;
 
 #ifdef GUNZIP
-  else if (magicno[0]==0x1f && magicno[1]==0x8b)        rv = RFT_COMPRESS;
+  else if (magicno[0]==0x1f && magicno[1]==0x8b)              rv = RFT_COMPRESS;
 #endif
 
-  else if (magicno[0]==0x0a && magicno[1] <= 5)         rv = RFT_PCX;
+#ifdef BUNZIP2
+  else if (magicno[0]==0x42 && magicno[1]==0x5a)              rv = RFT_BZIP2;
+#endif
+
+  else if (magicno[0]==0x0a && magicno[1] <= 5)               rv = RFT_PCX;
 
   else if (strncmp((char *) magicno,   "FORM", (size_t) 4)==0 &&
-	   strncmp((char *) magicno+8, "ILBM", (size_t) 4)==0)   rv = RFT_IFF;
+	   strncmp((char *) magicno+8, "ILBM", (size_t) 4)==0) rv = RFT_IFF;
 
   else if (magicno[0]==0 && magicno[1]==0 &&
 	   magicno[2]==2 && magicno[3]==0 &&
 	   magicno[4]==0 && magicno[5]==0 &&
-	   magicno[6]==0 && magicno[7]==0)              rv = RFT_TARGA;
+	   magicno[6]==0 && magicno[7]==0)                    rv = RFT_TARGA;
 
   else if (magicno[4]==0x00 && magicno[5]==0x00 &&
-	   magicno[6]==0x00 && magicno[7]==0x07)        rv = RFT_XWD;
+	   magicno[6]==0x00 && magicno[7]==0x07)              rv = RFT_XWD;
 
   else if (strncmp((char *) magicno,"SIMPLE  ", (size_t) 8)==0 &&
-	   magicno[29] == 'T')                          rv = RFT_FITS;
+	   magicno[29] == 'T')                                rv = RFT_FITS;
 
+  /* [JCE] Spectrum screen */
+  else if (memcmp(magicno, ZXheader, (size_t) 18)==0)         rv = RFT_ZX;
 
 #ifdef HAVE_JPEG
   else if (magicno[0]==0xff && magicno[1]==0xd8 &&
-	   magicno[2]==0xff)                            rv = RFT_JFIF;
+	   magicno[2]==0xff)                                  rv = RFT_JFIF;
 #endif
 
 #ifdef HAVE_TIFF
   else if ((magicno[0]=='M' && magicno[1]=='M') ||
-	   (magicno[0]=='I' && magicno[1]=='I'))        rv = RFT_TIFF;
+	   (magicno[0]=='I' && magicno[1]=='I'))              rv = RFT_TIFF;
+#endif
+
+#ifdef HAVE_PNG
+  else if (magicno[0]==0x89 && magicno[1]=='P' &&
+           magicno[2]=='N'  && magicno[3]=='G')               rv = RFT_PNG;
 #endif
 
 #ifdef HAVE_PDS
@@ -2635,11 +3064,59 @@ int ReadFileType(fname)
       rv = RFT_PDSVICAR;
 #endif
 
-#ifdef GS_PATH
+#ifdef GS_PATH   /* Ghostscript handles both PostScript and PDF */
   else if (strncmp((char *) magicno, "%!",     (size_t) 2)==0 ||
-	   strncmp((char *) magicno, "\004%!", (size_t) 3)==0)   rv = RFT_PS;
+	   strncmp((char *) magicno, "\004%!", (size_t) 3)==0 ||
+           strncmp((char *) magicno, "%PDF",   (size_t) 4)==0) rv = RFT_PS;
 #endif
 
+#ifdef HAVE_MAG
+  else if (strncmp((char *) magicno,"MAKI02  ", (size_t) 8)==0) rv = RFT_MAG;
+#endif
+
+#ifdef HAVE_MAKI
+  else if (strncmp((char *) magicno,"MAKI01A ", (size_t) 8)==0 ||
+	   strncmp((char *) magicno,"MAKI01B ", (size_t) 8)==0) rv = RFT_MAKI;
+#endif
+
+#ifdef HAVE_PIC
+  else if (magicno[0]=='P' && magicno[1]=='I'&&magicno[2]=='C') rv = RFT_PIC;
+#endif
+
+#ifdef HAVE_PI
+  else if (magicno[0]=='P' && magicno[1]=='i')                rv = RFT_PI;
+#endif
+
+#ifdef HAVE_HIPS
+  else if (strstr((char *) magicno, "./digest"))              rv = RFT_HIPS;
+#endif
+
+#ifdef HAVE_PCD
+  else if (magicno[0]==0xff && magicno[1]==0xff &&
+           magicno[2]==0xff && magicno[3]==0xff)              rv = RFT_PCD;
+#endif
+
+#ifdef MACBINARY
+    /* Now we try to handle MacBinary files, but the method is VERY dirty... */
+    if (macbin_alrchk == True) {
+      macb_file = True;
+      break;
+    }
+
+    if (rv != RFT_UNKNOWN)
+      break;
+
+    /* Skip MACBSIZE and recheck */
+    macbin_alrchk = True;
+    fp = xv_fopen(fname, "r");
+    if (!fp) return RFT_ERROR;
+    fseek(fp, MACBSIZE, SEEK_SET);
+    n = fread(magicno, (size_t) 1, (size_t) 30, fp);
+    fclose(fp);
+
+    if (n<30) return RFT_UNKNOWN;    /* files less than 30 bytes long... */
+  }
+#endif
   return rv;
 }
 
@@ -2652,9 +3129,10 @@ int ReadPicFile(fname, ftype, pinfo, quick)
      PICINFO *pinfo;
 {
   /* if quick is set, we're being called to generate icons, or something
-     like that.  We should load the image as quickly as possible.  Currently,
-     this only affects the LoadPS routine, which, if quick is set, only
-     generates the page file for the first page of the document */
+     like that.  We should load the image as quickly as possible.  Previously,
+     this affected only the LoadPS routine, which, if quick is set, only
+     generates the page file for the first page of the document.  Now it
+     also affects PCD, which loads only a thumbnail. */
 
   int rv = 0;
 
@@ -2665,7 +3143,11 @@ int ReadPicFile(fname, ftype, pinfo, quick)
   switch (ftype) {
   case RFT_GIF:     rv = LoadGIF   (fname, pinfo);         break;
   case RFT_PM:      rv = LoadPM    (fname, pinfo);         break;
+#ifdef HAVE_MGCSFX
+  case RFT_PBM:     rv = LoadPBM   (fname, pinfo, -1);     break;
+#else
   case RFT_PBM:     rv = LoadPBM   (fname, pinfo);         break;
+#endif
   case RFT_XBM:     rv = LoadXBM   (fname, pinfo);         break;
   case RFT_SUNRAS:  rv = LoadSunRas(fname, pinfo);         break;
   case RFT_BMP:     rv = LoadBMP   (fname, pinfo);         break;
@@ -2677,21 +3159,60 @@ int ReadPicFile(fname, ftype, pinfo, quick)
   case RFT_XPM:     rv = LoadXPM   (fname, pinfo);         break;
   case RFT_XWD:     rv = LoadXWD   (fname, pinfo);         break;
   case RFT_FITS:    rv = LoadFITS  (fname, pinfo, quick);  break;
+  case RFT_ZX:      rv = LoadZX    (fname, pinfo);         break; /* [JCE] */
+  case RFT_WBMP:    rv = LoadWBMP  (fname, pinfo);         break;
+
+#ifdef HAVE_PCD
+  /* if quick is switched on, use the smallest image size; don't ask the user */
+  case RFT_PCD:     rv = LoadPCD   (fname, pinfo, quick ? 0 : PcdSize);  break;
+#endif
 
 #ifdef HAVE_JPEG
-  case RFT_JFIF:    rv = LoadJFIF  (fname, pinfo, quick);    break;
+  case RFT_JFIF:    rv = LoadJFIF  (fname, pinfo, quick);  break;
 #endif
 
 #ifdef HAVE_TIFF
-  case RFT_TIFF:    rv = LoadTIFF  (fname, pinfo, quick);    break;
+  case RFT_TIFF:    rv = LoadTIFF  (fname, pinfo, quick);  break;
+#endif
+
+#ifdef HAVE_PNG
+  case RFT_PNG:     rv = LoadPNG   (fname, pinfo);         break;
 #endif
 
 #ifdef HAVE_PDS
-  case RFT_PDSVICAR: rv = LoadPDS  (fname, pinfo);           break;
+  case RFT_PDSVICAR: rv = LoadPDS  (fname, pinfo);         break;
 #endif
 
 #ifdef GS_PATH
-  case RFT_PS:      rv = LoadPS    (fname, pinfo, quick);    break;
+  case RFT_PS:      rv = LoadPS    (fname, pinfo, quick);  break;
+#endif
+
+#ifdef HAVE_MAG
+  case RFT_MAG:     rv = LoadMAG   (fname, pinfo);         break;
+#endif
+
+#ifdef HAVE_MAKI
+  case RFT_MAKI:    rv = LoadMAKI  (fname, pinfo);         break;
+#endif
+
+#ifdef HAVE_PIC
+  case RFT_PIC:     rv = LoadPIC   (fname, pinfo);         break;
+#endif
+
+#ifdef HAVE_PI
+  case RFT_PI:      rv = LoadPi    (fname, pinfo);         break;
+#endif
+
+#ifdef HAVE_PIC2
+  case RFT_PIC2:    rv = LoadPIC2  (fname, pinfo, quick);  break;
+#endif
+
+#ifdef HAVE_HIPS
+  case RFT_HIPS:    rv = LoadHIPS  (fname, pinfo);         break;
+#endif
+
+#ifdef HAVE_MGCSFX
+  case RFT_MGCSFX:  rv = LoadMGCSFX (fname, pinfo);        break;
 #endif
 
   }
@@ -2700,13 +3221,17 @@ int ReadPicFile(fname, ftype, pinfo, quick)
 
 
 /********************************/
-int UncompressFile(name, uncompname)
+int UncompressFile(name, uncompname, filetype)
      char *name, *uncompname;
+     int filetype;
 {
   /* returns '1' on success, with name of uncompressed file in uncompname
      returns '0' on failure */
 
   char namez[128], *fname, buf[512];
+#ifndef USE_MKSTEMP
+  int tmpfd;
+#endif
 
   fname = name;
   namez[0] = '\0';
@@ -2746,15 +3271,23 @@ int UncompressFile(name, uncompname)
   close(mkstemp(uncompname));
 #else
   mktemp(uncompname);
+  tmpfd = open(uncompname,O_WRONLY|O_CREAT|O_EXCL,S_IRWUSR);
+  if (tmpfd < 0) FatalError("UncompressFile(): can't create temporary file");
+  close(tmpfd);
 #endif
 
 #ifndef VMS
-  sprintf(buf,"%s -c %s >%s", UNCOMPRESS, fname, uncompname);
+  if (filetype == RFT_COMPRESS)
+    sprintf(buf,"%s -c '%s' > '%s'", UNCOMPRESS, fname, uncompname);
+# ifdef BUNZIP2
+  else if (filetype == RFT_BZIP2)
+    sprintf(buf,"%s -c '%s' > '%s'", BUNZIP2, fname, uncompname);
+# endif
 #else /* it IS VMS */
 # ifdef GUNZIP
-  sprintf(buf,"%s %s %s", UNCOMPRESS, fname, uncompname);
+  sprintf(buf,"%s '%s' '%s'", UNCOMPRESS, fname, uncompname);
 # else
-  sprintf(buf,"%s %s", UNCOMPRESS, fname);
+  sprintf(buf,"%s '%s'", UNCOMPRESS, fname);
 # endif
 #endif
 
@@ -2795,6 +3328,62 @@ int UncompressFile(name, uncompname)
 
   return 1;
 }
+
+
+#ifdef MACBINARY
+/********************************/
+int RemoveMacbinary(src, dst)
+     char *src, *dst;
+{
+  char buffer[8192]; /* XXX */
+  int n, eof;
+#ifndef USE_MKSTEMP
+  int tmpfd;
+#endif
+  FILE *sfp, *dfp;
+
+  sprintf(dst, "%s/xvmXXXXXX", tmpdir);
+#ifdef USE_MKSTEMP
+  close(mkstemp(dst));
+#else
+  mktemp(dst);
+  tmpfd = open(dst,O_WRONLY|O_CREAT|O_EXCL,S_IRWUSR);
+  if (tmpfd < 0) FatalError("RemoveMacbinary(): can't create temporary file");
+#endif
+
+  SetISTR(ISTR_INFO, "Removing MacBinary...");
+
+  sfp = xv_fopen(src, "r");
+#ifdef USE_MKSTEMP
+  dfp = xv_fopen(dst, "w");
+#else
+  dfp = fdopen(tmpfd, "w");
+#endif
+  if (!sfp || !dfp) {
+    SetISTR(ISTR_INFO, "Unable to remove a InfoFile header form '%s'.", src);
+    Warning();
+    return 0;
+  }
+  fseek(sfp, MACBSIZE, SEEK_SET);
+  while ((n = fread(buffer, 1, sizeof(buffer), sfp)) == 8192) /* XXX */
+    fwrite(buffer, 1, n, dfp);
+  if ((eof = feof(sfp)))
+    fwrite(buffer, 1, n, dfp);
+  fclose(sfp);
+  fflush(dfp);
+  fclose(dfp);
+#ifndef USE_MKSTEMP
+  close(tmpfd);
+#endif
+  if (!eof) {
+    SetISTR(ISTR_INFO, "Unable to remove a InfoFile header form '%s'.", src);
+    Warning();
+    return 0;
+  }
+
+  return 1;
+}
+#endif
 
 
 /********************************/
@@ -2918,6 +3507,9 @@ static int readpipe(cmd, fname)
 
   char fullcmd[512], tmpname[64], str[512];
   int i;
+#ifndef USE_MKSTEMP
+  int tmpfd;
+#endif
 
   if (!cmd || (strlen(cmd) < (size_t) 2)) return 1;
 
@@ -2926,6 +3518,9 @@ static int readpipe(cmd, fname)
   close(mkstemp(tmpname));
 #else
   mktemp(tmpname);
+  tmpfd = open(tmpname,O_WRONLY|O_CREAT|O_EXCL,S_IRWUSR);
+  if (tmpfd < 0) FatalError("openPic(): can't create temporary file");
+  close(tmpfd);
 #endif
   if (tmpname[0] == '\0') {   /* mktemp() or mkstemp() blew up */
     sprintf(str,"Unable to create temporary filename.");
@@ -2966,24 +3561,19 @@ static void openFirstPic()
 {
   int i;
 
+  waitsec = (numnames <= 1)? waitsec_final : waitsec_nonfinal;
+
   if (!numnames) {  openPic(DFLTPIC);  return; }
 
   i = 0;
-  if (!randomShow) {
-    while (numnames>0) {
-      if (openPic(0)) return;  /* success */
-      else {
-	if (polling && !i)
-	  fprintf(stderr,"%s: POLLING: Waiting for file '%s' \n\tto %s\n",
-		  cmd, namelist[0], "be created, or whatever...");
-	i = 1;
-      }
+  while (numnames>0) {
+    if (openPic(0)) return;  /* success */
+    else {
+      if (polling && !i)
+	fprintf(stderr,"%s: POLLING: Waiting for file '%s' \n\tto %s\n",
+		cmd, namelist[0], "be created, or whatever...");
+      i = 1;
     }
-  }
-
-  else {    /* pick random first picture */
-    for (i=findRandomPic();  i>=0;  i=findRandomPic())
-      if (openPic(i)) return;    /* success */
   }
 
   if (numnames>1) FatalError("couldn't open any pictures");
@@ -3014,19 +3604,15 @@ static void openNextQuit()
 {
   int i;
 
-  if (!randomShow) {
-    if (curname>=0) i = curname+1;
-    else if (nList.selected >= 0 && nList.selected < numnames)
-      i = nList.selected;
-    else i = 0;
+  if (curname>=0) i = curname+1;
+  else if (nList.selected >= 0 && nList.selected < numnames)
+    i = nList.selected;
+  else i = 0;
 
-    while (i<numnames && !openPic(i));
-    if (i<numnames) return;    /* success */
-  }
-  else {
-    for (i=findRandomPic(); i>=0; i=findRandomPic())
-      if (openPic(i)) return;
-  }
+  waitsec = (i == numnames-1)? waitsec_final : waitsec_nonfinal;
+
+  while (i<numnames && !openPic(i));
+  if (i<numnames) return;    /* success */
 
   Quit(0);
 }
@@ -3039,25 +3625,21 @@ static void openNextLoop()
 
   j = loop = 0;
   while (1) {
-    if (!randomShow) {
 
-      if (curname>=0) i = curname+1;
-      else if (nList.selected >= 0 && nList.selected < numnames)
-	i = nList.selected;
-      else i = 0;
+    if (curname>=0) i = curname+1;
+    else if (nList.selected >= 0 && nList.selected < numnames)
+      i = nList.selected;
+    else i = 0;
 
-      if (loop) {  i = 0;   loop = 0; }
+    if (loop) {  i = 0;   loop = 0; }
 
-      while (i<numnames && !openPic(i));
-      if (i<numnames) return;
-    }
-    else {
-      for (i=findRandomPic(); i>=0; i=findRandomPic())
-	if (openPic(i)) return;
-    }
+    waitsec = (i == numnames-1)? waitsec_final : waitsec_nonfinal;
+
+    while (i<numnames && !openPic(i));
+    if (i<numnames) return;
 
     loop = 1;        /* back to top of list */
-    if (j) break;                         /* we're in a 'failure loop' */
+    if (j) break;    /* we're in a 'failure loop' */
     j++;
   }
 
@@ -3090,47 +3672,6 @@ static void openNamedPic()
   openPic(LOADPIC);
 }
 
-
-
-
-/****************/
-static int findRandomPic()
-/****************/
-{
-  static byte *loadList;
-  static int   left_to_load, listLen = -1;
-  int          k;
-  time_t       t;
-
-  /* picks a random name out of the list, and returns it's index.  If there
-     are no more names to pick, it returns '-1' and resets itself */
-
-  if (!loadList || numnames!=listLen) {
-    if (loadList) free(loadList);
-    else {
-      time(&t);
-      srandom((unsigned int) t); /* seed the random */
-    }
-
-    left_to_load = listLen = numnames;
-    loadList = (byte *) malloc((size_t) listLen);
-    for (k=0; k<listLen; k++) loadList[k] = 0;
-  }
-
-  if (left_to_load <= 0) {   /* we've loaded all the pics */
-    for (k=0; k<listLen; k++) loadList[k] = 0;   /* clear flags */
-    left_to_load = listLen;
-    return -1;   /* 'done' return */
-  }
-
-  for (k=abs(random()) % listLen;  loadList[k];  k = (k+1) % listLen);
-
-  left_to_load--;
-  loadList[k] = TRUE;
-
-  return k;
-}
-
 /****************/
 static void mainLoop()
 {
@@ -3144,10 +3685,11 @@ static void mainLoop()
      selected file (or the 0th file, if no selection either), and 'Prev' means
      view the one right before the selected file */
 
-  openFirstPic();   /* find first displayable picture, exit if none */
+  /* find first displayable picture, exit if none */
+  if (!startGrab) openFirstPic();
 
   if (!pic)  {  /* must've opened a text file...  display dflt pic */
-    openPic(DFLTPIC);
+    if (!startGrab) openPic(DFLTPIC);
     if (mainW && !useroot) RaiseTextWindows();
   }
 
@@ -3224,8 +3766,16 @@ static void createMainWindow(geom, name)
   hints.flags = 0;
   if ((i&XValue || i&YValue)) hints.flags = USPosition;
 
-  if (i&XValue && i&XNegative) x = vrWIDE - eWIDE - abs(x);
-  if (i&YValue && i&YNegative) y = vrHIGH - eHIGH - abs(y);
+  hints.win_gravity = NorthWestGravity;
+  if (i&XValue && i&XNegative) {
+    hints.win_gravity = NorthEastGravity;
+    x = vrWIDE - (eWIDE + 2 * bwidth) - abs(x);
+  }
+  if (i&YValue && i&YNegative) {
+    hints.win_gravity = (hints.win_gravity == NorthWestGravity) ?
+      SouthWestGravity : SouthEastGravity;
+    y = vrHIGH - (eHIGH + 2 * bwidth) - abs(y);
+  }
 
   if (x+eWIDE > vrWIDE) x = vrWIDE - eWIDE;   /* keep on screen */
   if (y+eHIGH > vrHIGH) y = vrHIGH - eHIGH;
@@ -3245,7 +3795,7 @@ static void createMainWindow(geom, name)
   hints.x = x;                  hints.y = y;
   hints.width = eWIDE;          hints.height = eHIGH;
   hints.max_width  = maxWIDE;   hints.max_height = maxHIGH;
-  hints.flags |= USSize | PMaxSize;
+  hints.flags |= USSize | PMaxSize | PWinGravity;
 
   xswa.bit_gravity = StaticGravity;
   xswa.background_pixel = bg;
@@ -3294,10 +3844,6 @@ static void createMainWindow(geom, name)
     }
   }
 
-
-  XSetStandardProperties(theDisp,mainW,"","",None,NULL,0,&hints);
-  setWinIconNames(name);
-
   xwmh.input = True;
   xwmh.flags = InputHint;
 
@@ -3322,12 +3868,13 @@ static void createMainWindow(geom, name)
       }
     }
   }
-  XSetWMHints(theDisp, mainW, &xwmh);
 
   classh.res_name = "xv";
   classh.res_class = "XVroot";
-  XSetClassHint(theDisp, mainW, &classh);
 
+  XmbSetWMProperties(theDisp, mainW, NULL, NULL, NULL, 0, &hints, &xwmh,
+                     &classh);
+  setWinIconNames(name);
 
   if (nodecor) {   /* turn of image window decorations (in MWM) */
     Atom mwm_wm_hints;
@@ -4070,16 +4617,30 @@ int rd_str_cl (name_str, class_str, reinit)
       unsigned long nitems, nleft;
       byte *data;
 
-      i = XGetWindowProperty(theDisp, RootWindow(theDisp, 0),
-			     resAtom, 0L, 1L, False,
-			     XA_STRING, &actType, &actFormat, &nitems, &nleft,
-			     (unsigned char **) &data);
+      if (spec_window) {
+        i = XGetWindowProperty(theDisp, spec_window,
+			       resAtom, 0L, 1L, False,
+			       XA_STRING, &actType, &actFormat, &nitems, &nleft,
+			       (unsigned char **) &data);
+      } else {
+        i = XGetWindowProperty(theDisp, RootWindow(theDisp, 0),
+			       resAtom, 0L, 1L, False,
+			       XA_STRING, &actType, &actFormat, &nitems, &nleft,
+			       (unsigned char **) &data);
+      }
       if (i==Success && actType==XA_STRING && actFormat==8) {
 	if (nitems>0 && data) XFree(data);
-	i = XGetWindowProperty(theDisp, RootWindow(theDisp, 0), resAtom, 0L,
-			       (long) ((nleft+4+3)/4),
-			       False, XA_STRING, &actType, &actFormat,
-			       &nitems, &nleft, (unsigned char **) &data);
+        if (spec_window) {
+	  i = XGetWindowProperty(theDisp, spec_window, resAtom, 0L,
+			         (long) ((nleft+4+3)/4),
+			         False, XA_STRING, &actType, &actFormat,
+			         &nitems, &nleft, (unsigned char **) &data);
+        } else {
+	  i = XGetWindowProperty(theDisp, RootWindow(theDisp, 0), resAtom, 0L,
+			         (long) ((nleft+4+3)/4),
+			         False, XA_STRING, &actType, &actFormat,
+			         &nitems, &nleft, (unsigned char **) &data);
+        }
 	if (i==Success && actType==XA_STRING && actFormat==8 && data) {
 	  def_resource = XrmGetStringDatabase((char *) data);
 	  XFree(data);

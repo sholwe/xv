@@ -14,7 +14,7 @@
  * provided "as is" without express or implied warranty.
  */
 
-
+#define  NEEDSDIR /* for S_IRUSR|S_IWUSR */
 #include "xv.h"
 
 #define NCARDS    (36)
@@ -228,7 +228,7 @@ static int splitfits(image, comment, nx, ny, nz, basename)
    * If there was a problem writing files, then a error message will be set.
    */
 
-  int   i, npixels=nx * ny, nwrt;
+  int   i, npixels=nx * ny, nwrt, tmpfd;
   FILE *fp;
   char *error;
   char  filename[70];
@@ -254,7 +254,12 @@ static int splitfits(image, comment, nx, ny, nz, basename)
 
   for (i=0; i < nz && !error; i++) {
     sprintf(filename, "%s%d", basename, i+1);
-    fp = xv_fopen(filename, "w");
+    tmpfd = open(filename,O_WRONLY|O_CREAT|O_EXCL,S_IRWUSR);
+    if (tmpfd < 0) {
+      error = "Unable to open temporary file";
+      break;
+    }
+    fp = fdopen(tmpfd, "w");
     if (!fp) {
       error = "Unable to open temporary file";
       break;
@@ -262,13 +267,17 @@ static int splitfits(image, comment, nx, ny, nz, basename)
 
     if (wrheader(fp, nx, ny, comment)) {
       error = "I/O error writing temporary file";
+      fflush(fp);
       fclose(fp);
       unlink(filename);
+      close(tmpfd);
       break;
     }
 
     nwrt = fwrite(image+i*npixels, sizeof(byte), (size_t) npixels, fp);
+    fflush(fp);
     fclose(fp);
+    close(tmpfd);
 
     if (nwrt == 0) {  /* failed to write any data */
       error = "I/O error writing temporary file";

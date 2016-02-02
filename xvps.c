@@ -142,9 +142,9 @@ char *geom;
   CBCreate(&encapsCB, psW, 240, 7, "preview", infofg, infobg, hicol, locol);
   CBCreate(&pscompCB, psW, 331, 7, "compress", infofg, infobg, hicol, locol);
 
-  DCreate(&xsDial, psW, 240, 30, 80, 100, 10, 800, 100, 5,
+  DCreate(&xsDial, psW, 240, 30, 80, 100, 10.0, 800.0, 100.0, 0.5, 5.0,
 	  infofg, infobg, hicol, locol, "Width", "%");
-  DCreate(&ysDial, psW, 331, 30, 80, 100, 10, 800, 100, 5,
+  DCreate(&ysDial, psW, 331, 30, 80, 100, 10.0, 800.0, 100.0, 0.5, 5.0,
 	  infofg, infobg, hicol, locol, "Height", "%");
   xsDial.drawobj = changedScale;
   ysDial.drawobj = changedScale;
@@ -239,10 +239,10 @@ char *geom;
 
   if (rd_int("psres")) {             /* xv.psres:  default paper resolution */
     if (def_int >= 10 && def_int <= 720) {
-      int i = (int) ((PIX2INCH * 100) / def_int);
+      double v = (PIX2INCH * 100) / def_int;
 
-      DSetVal(&xsDial, i);
-      DSetVal(&ysDial, i);
+      DSetVal(&xsDial, v);
+      DSetVal(&ysDial, v);
     }
   }
 
@@ -839,7 +839,7 @@ static void maxImage()
   if (scx < scy) { sz_iny = h * scx; }
             else { sz_inx = w * scy; }
 
-  DSetVal(&xsDial, (int) ((100 * (sz_inx * PIX2INCH) / w) + .5));
+  DSetVal(&xsDial, 100 * (sz_inx * PIX2INCH) / w);
   DSetVal(&ysDial, xsDial.val);
 
   sz_inx = (double) w / PIX2INCH * (xsDial.val / 100.0);
@@ -1561,9 +1561,9 @@ int LoadPS(fname, pinfo, quick)
      the first one is loaded (but not deleted) */
 
 #ifdef GS_PATH
-  char tmp[512], gscmd[512], cmdstr[512], tmpname[64];
+  #define CMDSIZE	1024
+  char tmp[512], gscmd[512], cmdstr[CMDSIZE], tmpname[64];
   int  gsresult, nump, i, filetype, doalert, epsf;
-  char *rld;
 #endif
 
   pinfo->pic     = (byte *) NULL;
@@ -1596,7 +1596,7 @@ int LoadPS(fname, pinfo, quick)
   /* build 'gscmd' string */
 
 #ifndef VMS  /* VMS needs quotes around mixed case command lines */
-  sprintf(gscmd, "%s -sDEVICE=%s -r%d -q -dNOPAUSE -sOutputFile=%s%%d ",
+  sprintf(gscmd, "%s -sDEVICE=%s -r%d -q -dSAFER -dNOPAUSE -sOutputFile=%s%%d ",
 	  GS_PATH, gsDev, gsRes, tmpname);
 #else
   sprintf(gscmd,
@@ -1734,32 +1734,48 @@ int LoadPS(fname, pinfo, quick)
 
 /******************************************************************/
 #ifdef GS_PATH
-void buildCmdStr(str, gscmd, fname, quick, epsf)
-     char *str, *gscmd, *fname;
+void buildCmdStr(str, gscmd, xname, quick, epsf)
+     char *str, *gscmd, *xname;
      int   quick, epsf;
 {
   /* note 'epsf' set only on files that don't have a showpage cmd */
+  char *x, *y, *fname;
+
+  x = (char *) malloc((5 * strlen(xname))+3);
+  if (!x)
+	FatalError("malloc failure in xvps.c buildCmdStr");
+  fname = x;
+  *x++ = 0x27;
+
+  for (y = xname; *y; ++y) {
+     if (0x27 == *y) {
+       strcpy(x, "'\"'\"'");
+       x += strlen(x);
+     } else *x++ = *y;
+  }
+  strcpy (x, "'");
 
 #ifndef VMS
 
-  if      (epsf)  sprintf(str, "echo '\n showpage ' | cat '%s' - | %s -",
+  if      (epsf)  snprintf(str, CMDSIZE, "echo '\n showpage ' | cat %s - | %s -",
 			  fname, gscmd);
 
-  else if (quick) sprintf(str, "echo '%s' | cat - '%s' | %s -",
+  else if (quick) snprintf(str, CMDSIZE, "echo %s | cat - %s | %s -",
 			  "/showpage { showpage quit } bind def",
 			  fname,  gscmd);
 
-  else            sprintf(str, "%s -- %s", gscmd, fname);
+  else            snprintf(str, CMDSIZE, "%s -- %s", gscmd, fname);
 
 #else /* VMS */
   /* VMS doesn't have pipes or an 'echo' command and GS doesn't like
-     Unix-style file names as input files in the VMS version */
+     Unix-style filenames as input files in the VMS version */
   strcat(tmp, " -- ");
   rld = strrchr(fname, '/');     /* Pointer to last '/' */
   if (rld) rld++;                /* Pointer to filename */
   else rld = fname;              /* No path - use original string */
   strcat(tmp, rld);
 #endif  /* VMS */
+  free(fname);
 }
 #endif  /* GS_PATH */
 

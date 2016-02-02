@@ -14,6 +14,13 @@
 #define NEEDSTIME
 #include "xv.h"
 
+/* Allow flexibility in use of buttons JPD */
+#define WINDOWGRABMASK Button1Mask  /* JPD prefers Button2Mask */
+#define RECTGTRACKMASK Button2Mask  /* JPD prefers Button1Mask*/
+#define CANCELGRABMASK Button3Mask
+
+#define DO_GRABFLASH  /* JPD prefers not to do that; just a loss of time ... */
+
 
 union swapun {
   CARD32 l;
@@ -69,12 +76,15 @@ int Grab()
      0 if cancelled */
 
   int          i, x, y, x1, y1, x2, y2, ix, iy, iw, ih, rv;
-  int          rx, ry, pretendGotB1, autograb;
+  int          rx, ry, GotButton, autograb;
+  int          cancelled = 0;
   Window       rW, cW, clickWin;
   unsigned int mask;
+#ifdef RECOLOR_GRAB_CURSOR
   XColor       fc, bc;
+#endif
 
-  pretendGotB1 = 0;
+  GotButton = 0;
 
   if (grabInProgress) return 0;      /* avoid recursive grabs during delay */
 
@@ -122,14 +132,22 @@ int Grab()
     free(grabPic);  grabPic = (byte *) NULL;
   }
 
-
+  /* recolor cursor to indicate that grabbing is active? */
+  /* Instead, change cursor JPD */
+#ifdef RECOLOR_GRAB_CURSOR
   fc.flags = bc.flags = DoRed | DoGreen | DoBlue;
   fc.red = fc.green = fc.blue = 0xffff;
   bc.red = bc.green = bc.blue = 0x0000;
   XRecolorCursor(theDisp, tcross, &fc, &bc);
+#endif
 
 
   XBell(theDisp, 0);		/* beep once at start of grab */
+
+  /* Change cursor to top_left_corner JPD */
+  XGrabPointer(theDisp, rootW, False,
+     PointerMotionMask|ButtonPressMask|ButtonReleaseMask,
+     GrabModeAsync, GrabModeAsync, None, tlcorner, CurrentTime);
 
   if (!autograb) XGrabButton(theDisp, (u_int) AnyButton, 0, rootW, False, 0,
 			     GrabModeAsync, GrabModeSync, None, tcross);
@@ -142,7 +160,7 @@ int Grab()
       rv = 0;
       goto exit;
     }
-    else { pretendGotB1 = 1;  mask = Button1Mask; }
+    else { GotButton = 1;  mask = WINDOWGRABMASK; }
   }
 
   else {   /* !autograb */
@@ -170,16 +188,20 @@ int Grab()
     }
   }
 
+  XUngrabPointer(theDisp, CurrentTime);
+  /* Reset cursor to XC_tcross JPD */
+  XGrabPointer(theDisp, rootW, False,
+     PointerMotionMask|ButtonPressMask|ButtonReleaseMask,
+     GrabModeAsync, GrabModeAsync, None, tcross, CurrentTime);
 
   /***
    ***  got button click (or pretending we did, if autograb)
    ***/
 
-
-  if (mask & Button3Mask || rW!=rootW) {        /* Button3: CANCEL GRAB */
+  if (mask & CANCELGRABMASK || rW!=rootW) {        /* CANCEL GRAB */
     while (1) {      /* wait for button to be released */
       if (XQueryPointer(theDisp,rootW,&rW,&cW,&rx,&ry,&x1,&y1,&mask)) {
-	if (!(mask & Button3Mask)) break;
+	if (!(mask & CANCELGRABMASK)) break;
       }
     }
 
@@ -187,18 +209,20 @@ int Grab()
     XBell(theDisp, 0);
     XBell(theDisp, 0);
     rv = 0;
+    cancelled = 1;
     goto exit;
   }
 
 
-
-  if (mask & Button1Mask) {  /* Button1:  GRAB WINDOW (& FRAME, maybe)     */
-    while (!pretendGotB1) {  /* wait for button to be released, if clicked */
+  if (mask & WINDOWGRABMASK) {  /* GRAB WINDOW (& FRAME, maybe)     */
+    while (!GotButton) {  /* wait for button to be released, if clicked */
       int rx,ry,x1,y1;  Window rW, cW;
       if (XQueryPointer(theDisp,rootW,&rW,&cW,&rx,&ry,&x1,&y1,&mask)) {
-	if (!(mask & Button1Mask)) break;
+	if (!(mask & WINDOWGRABMASK)) break;
       }
     }
+
+  grabwin:
 
     clickWin = (cW) ? cW : rootW;
 
@@ -223,7 +247,6 @@ int Grab()
       }
     }
 
-
     /* range checking:  keep rectangle fully on-screen */
     if (ix<0) { iw += ix;  ix = 0; }
     if (iy<0) { ih += iy;  iy = 0; }
@@ -244,8 +267,7 @@ int Grab()
     endflash();
   }
 
-
-  else {  /* Button2:  TRACK A RECTANGLE */
+  else {  /* TRACK A RECTANGLE */
     int    origrx, origry;
 
     clickWin = rootW;
@@ -259,7 +281,7 @@ int Grab()
     /* Wait for button release while tracking rectangle on screen */
     while (1) {
       if (XQueryPointer(theDisp,rootW,&rW,&cW,&rx,&ry,&x,&y,&mask)) {
-	if (!(mask & Button2Mask)) break;
+	if (!(mask & RECTGTRACKMASK)) break;
       }
 
       flashrect(ix, iy, iw, ih, 0);                /* turn off rect */
@@ -276,6 +298,7 @@ int Grab()
 
     flashrect(ix, iy, iw, ih, 0);                  /* turn off rect */
 
+#ifdef DO_GRABFLASH
     /* flash the rectangle a bit... */
     for (i=0; i<5; i++) {
       flashrect(ix, iy, iw, ih, 1);
@@ -283,13 +306,26 @@ int Grab()
       flashrect(ix, iy, iw, ih, 0);
       XFlush(theDisp);  Timer(100);
     }
+#endif
+
     endflash();
+
+    /* if rectangle has zero width or height, search for child window JPD */
+    if (iw==0 && ih==0) {
+       int xr, yr;
+       Window childW = 0;
+       if (rW && cW)
+          XTranslateCoordinates(theDisp, rW, cW, rx, ry, &xr, &yr, &childW);
+       if (childW)
+          cW = childW;
+       goto grabwin;
+    }
 
     XUngrabServer(theDisp);
   }
 
-
   /***
+   ***  now that clickWin,ix,iy,iw,ih are known, try to grab the bits :
    ***  grab screen area (ix,iy,iw,ih)
    ***/
 
@@ -303,8 +339,15 @@ int Grab()
 
   SetCursors(-1);
 
-
  exit:
+
+  XUngrabPointer(theDisp, CurrentTime);
+  XUngrabServer(theDisp);
+
+  if (startGrab) {
+    startGrab = 0;
+    if (cancelled) Quit(0);
+  }
 
   if (hidewins) {                   /* remap XV windows */
     autoclose += 2;                 /* force it on once */
@@ -1217,7 +1260,3 @@ static int Trivial24to8(pic24, w,h, pic8, rmap,gmap,bmap, maxcol)
 
   return 1;
 }
-
-
-
-

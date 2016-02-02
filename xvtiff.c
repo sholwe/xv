@@ -512,7 +512,7 @@ static void _TIFFerr(module, fmt, ap)
   vsprintf(cp, fmt, ap);
   strcat(cp, ".");
 
-  SetISTR(ISTR_WARNING,buf);
+  SetISTR(ISTR_WARNING, "%s", buf);
 
   error_occurred = 1;
 }
@@ -536,7 +536,7 @@ static void _TIFFwarn(module, fmt, ap)
   vsprintf(cp, fmt, ap);
   strcat(cp, ".");
 
-  SetISTR(ISTR_WARNING,buf);
+  SetISTR(ISTR_WARNING, "%s", buf);
 }
 
 
@@ -563,6 +563,10 @@ static	float   *refBlackWhite;
 
 static	byte **BWmap;
 static	byte **PALmap;
+
+/* XXXX Work around some collisions with the new library. */
+#define tileContigRoutine _tileContigRoutine
+#define tileSeparateRoutine _tileSeparateRoutine
 
 typedef void (*tileContigRoutine)   PARM((byte*, u_char*, RGBvalue*,
 					  uint32, uint32, int, int));
@@ -603,7 +607,7 @@ static void   put2bitbwtile            PARM((byte *, u_char *, RGBvalue *,
 					     uint32, uint32, int, int));
 static void   put4bitbwtile            PARM((byte *, u_char *, RGBvalue *,
 					     uint32, uint32, int, int));
-static void   put16bitbwtile           PARM((byte *, u_char *, RGBvalue *,
+static void   put16bitbwtile           PARM((byte *, u_short *, RGBvalue *,
 					     uint32, uint32, int, int));
 
 static void   putRGBcontig8bittile     PARM((byte *, u_char *, RGBvalue *,
@@ -653,7 +657,7 @@ static int loadImage(tif, rwidth, rheight, raster, stop)
 
   default:
     TIFFError(TIFFFileName(tif),
-	      "Sorry, can not handle %d-bit pictures", bitspersample);
+	      "Sorry, cannot handle %d-bit pictures", bitspersample);
     return (0);
   }
 
@@ -666,7 +670,7 @@ static int loadImage(tif, rwidth, rheight, raster, stop)
 
   default:
     TIFFError(TIFFFileName(tif),
-	      "Sorry, can not handle %d-channel images", samplesperpixel);
+	      "Sorry, cannot handle %d-channel images", samplesperpixel);
     return (0);
   }
 
@@ -1157,7 +1161,7 @@ static int gtStripSeparate(tif, raster, Map, h, w, bpp)
   b = g + stripsize;
   put = pickTileSeparateCase(Map);
   if (put == 0) {
-    TIFFError(filename, "Can not handle format");
+    TIFFError(filename, "Cannot handle format");
     return (0);
   }
   y = setorientation(tif, h);
@@ -1197,7 +1201,7 @@ static int gtStripSeparate(tif, raster, Map, h, w, bpp)
 /*
  * Greyscale images with less than 8 bits/sample are handled
  * with a table to avoid lots of shifts and masks.  The table
- * is setup so that put*bwtile (below) can retrieve 8/bitspersample
+ * is set up so that put*bwtile (below) can retrieve 8/bitspersample
  * pixel values simply by indexing into the table with one
  * number.
  */
@@ -1249,11 +1253,11 @@ static int makebwmap()
 
 
 /*
- * Palette images with <= 8 bits/sample are handled
- * with a table to avoid lots of shifts and masks.  The table
- * is setup so that put*cmaptile (below) can retrieve 8/bitspersample
- * pixel values simply by indexing into the table with one
- * number.
+ * Palette images with <= 8 bits/sample are handled with
+ * a table to avoid lots of shifts and masks.  The table
+ * is set up so that put*cmaptile (below) can retrieve
+ * (8/bitspersample) pixel-values simply by indexing into
+ * the table with one number.
  */
 static int makecmap()
 {
@@ -1305,7 +1309,7 @@ static int makecmap()
 /*
  * The following routines move decoded data returned
  * from the TIFF library into rasters filled with packed
- * ABGR pixels (i.e. suitable for passing to lrecwrite.)
+ * ABGR pixels (i.e., suitable for passing to lrecwrite.)
  *
  * The routines have been created according to the most
  * important cases and optimized.  pickTileContigCase and
@@ -1376,7 +1380,7 @@ static void put8bitcmaptile(cp, pp, Map, w, h, fromskew, toskew)
      int fromskew, toskew;
 {
   while (h-- > 0) {
-    UNROLL8(w, , *cp++ = PALmap[*pp++][0])
+    UNROLL8(w, , *cp++ = PALmap[*pp++][0]);
     cp += toskew;
     pp += fromskew;
   }
@@ -1529,7 +1533,7 @@ static void put4bitbwtile(cp, pp, Map, w, h, fromskew, toskew)
  */
 static void put16bitbwtile(cp, pp, Map, w, h, fromskew, toskew)
      byte  *cp;
-     u_char *pp;
+     u_short *pp;
      RGBvalue *Map;
      uint32 w, h;
      int fromskew, toskew;
@@ -1538,8 +1542,7 @@ static void put16bitbwtile(cp, pp, Map, w, h, fromskew, toskew)
 
   while (h-- > 0) {
     for (x=w; x>0; x--) {
-      *cp++ = Map[(pp[0] << 8) + pp[1]];
-      pp += 2;
+      *cp++ = Map[*pp++];
     }
     cp += toskew;
     pp += fromskew;
@@ -1577,7 +1580,7 @@ static void putRGBcontig8bittile(cp, pp, Map, w, h, fromskew, toskew)
 	      *cp++ = pp[0];
 	      *cp++ = pp[1];
 	      *cp++ = pp[2];
-	      pp += samplesperpixel)
+	      pp += samplesperpixel);
       cp += toskew;
       pp += fromskew;
     }
@@ -1650,7 +1653,7 @@ static void putRGBseparate8bittile(cp, r, g, b, Map, w, h, fromskew, toskew)
 	      *cp++ = *r++;
 	      *cp++ = *g++;
 	      *cp++ = *b++;
-	      )
+	      );
       SKEW(r, g, b, fromskew);
       cp += toskew;
     }
@@ -1857,7 +1860,7 @@ static tileContigRoutine pickTileContigCase(Map)
   case PHOTOMETRIC_MINISWHITE:
   case PHOTOMETRIC_MINISBLACK:
     switch (bitspersample) {
-    case 16: put = put16bitbwtile; break;
+    case 16: put = (tileContigRoutine) put16bitbwtile; break;
     case 8:  put = putgreytile;    break;
     case 4:  put = put4bitbwtile;  break;
     case 2:  put = put2bitbwtile;  break;
@@ -1872,7 +1875,7 @@ static tileContigRoutine pickTileContigCase(Map)
     break;
   }
 
-  if (put==0) TIFFError(filename, "Can not handle format");
+  if (put==0) TIFFError(filename, "Cannot handle format");
   return (put);
 }
 
@@ -1880,8 +1883,8 @@ static tileContigRoutine pickTileContigCase(Map)
 /*
  * Select the appropriate conversion routine for unpacked data.
  *
- * NB: we assume that unpacked single channel data is directed
- *	 to the "packed routines.
+ * NB: we assume that unpacked single-channel data is directed
+ *	 to the "packed" routines.
  */
 static tileSeparateRoutine pickTileSeparateCase(Map)
      RGBvalue* Map;
@@ -1897,8 +1900,30 @@ static tileSeparateRoutine pickTileSeparateCase(Map)
     break;
   }
 
-  if (put==0) TIFFError(filename, "Can not handle format");
+  if (put==0) TIFFError(filename, "Cannot handle format");
   return (put);
+}
+
+
+
+/*******************************************/
+void
+VersionInfoTIFF()      /* GRR 19980605 */
+{
+  char temp[1024], *p, *q;
+
+  strcpy(temp, TIFFGetVersion());
+  p = temp;
+  while (!isdigit(*p))
+    ++p;
+  if ((q = strchr(p, '\n')) != NULL)
+    *q = '\0';
+
+  fprintf(stderr, "   Compiled with libtiff %s", p);
+#ifdef TIFFLIB_VERSION
+  fprintf(stderr, " of %d", TIFFLIB_VERSION);    /* e.g., 19960307 */
+#endif
+  fprintf(stderr, ".\n");
 }
 
 

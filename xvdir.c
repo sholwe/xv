@@ -62,6 +62,9 @@ static char *saveFormats[] = { "GIF",
 #ifdef HAVE_TIFF
 			       "TIFF",
 #endif
+#ifdef HAVE_PNG
+			       "PNG",
+#endif
 			       "PostScript",
 			       "PBM/PGM/PPM (raw)",
 			       "PBM/PGM/PPM (ascii)",
@@ -73,9 +76,32 @@ static char *saveFormats[] = { "GIF",
 			       "Targa (24-bit)",
 			       "FITS",
 			       "PM",
+			       "Spectrum SCREEN$",	/* [JCE] */
+			       "WBMP",
+#ifdef HAVE_MAG
+			       "MAG",
+#endif
+#ifdef HAVE_PIC
+			       "PIC",
+#endif
+#ifdef HAVE_MAKI
+			       "MAKI (640x400 only)",
+#endif
+#ifdef HAVE_PI
+			       "PI",
+#endif
+#ifdef HAVE_PIC2
+			       "PIC2",
+#endif
+#ifdef HAVE_MGCSFX
+			       "MgcSfx",
+#endif
 			       MBSEP,
 			       "Filename List"};
 
+#ifdef HAVE_PIC2
+extern int PIC2SaveParams    PARM((char *, int));
+#endif
 
 static void arrangeButts     PARM((int));
 static void RedrawDList      PARM((int, SCRL *));
@@ -570,7 +596,11 @@ static void changedDirMB(sel)
     }
 #endif
 
+#ifdef AUTO_EXPAND
+    if (Chvdir(tmppath)) {
+#else
     if (chdir(tmppath)) {
+#endif
       char str[512];
       sprintf(str,"Unable to cd to '%s'\n", tmppath);
       *trunc_point = '/';  /* restore the path */
@@ -635,7 +665,11 @@ void LoadCurrentDirectory()
   xv_getwd(path, sizeof(path));
 #endif
 
+#ifdef AUTO_EXPAND
+  if (Chvdir(path)) {
+#else
   if (chdir(path)) {
+#endif
     ErrPopUp("Current load/save directory seems to have gone away!",
 	     "\nYikes!");
 #ifdef apollo
@@ -643,7 +677,11 @@ void LoadCurrentDirectory()
 #else
     strcpy(path,"/");
 #endif
+#ifdef AUTO_EXPAND
+    Chvdir(path);
+#else
     chdir(path);
+#endif
   }
 
   changedDir = strcmp(path, oldpath);
@@ -748,6 +786,9 @@ void LoadCurrentDirectory()
 	else if (S_ISFIFO(ftype)) fnames[i][0] = C_FIFO;
 	else if (S_ISSOCK(ftype)) fnames[i][0] = C_SOCK;
         else if (fnames[i][0] == C_REG && (mode&0111)) fnames[i][0] = C_EXE;
+#ifdef AUTO_EXPAND
+	else if (Isarchive(fnames[i]+1)) fnames[i][0] = C_DIR;
+#endif
       }
       else {
 	/* fprintf(stderr,"problems 'stat-ing' files\n");*/
@@ -847,7 +888,7 @@ int DirKey(c)
     scrollToFileName();
   }
 
-  else if (c=='\010' || c=='\177') {    /* BS or DEL */
+  else if (c=='\010') {                 /* BS */
     if (curPos==0) return(-1);          /* at beginning of str */
     xvbcopy(&filename[curPos], &filename[curPos-1], (size_t) (len-curPos+1));
     curPos--;
@@ -872,7 +913,7 @@ int DirKey(c)
     curPos = len;
   }
 
-  else if (c=='\004') {                 /* ^D: delete character at curPos */
+  else if (c=='\004' || c=='\177') {    /* ^D or DEL: delete character at curPos */
     if (curPos==len) return(-1);
     xvbcopy(&filename[curPos+1], &filename[curPos], (size_t) (len-curPos));
   }
@@ -1055,6 +1096,25 @@ int DoSave()
 
   fullname = GetDirFullName();
 
+#ifdef AUTO_EXPAND
+  {
+      char path[MAXPATHLEN];
+
+      GetDirPath(path);
+      Mkvdir(path);
+      if ((i = Isvdir(fullname)) & 01) {
+	  char buf[128];
+	  sprintf(buf,
+		  "Sorry, you can't save file in the virtual directory, '%s'",
+		  path);
+	  ErrPopUp(buf, "\nBummer!");
+	  return -1;
+      }
+      if (i & 06)
+	  Rmvdir(fullname);
+  }
+#endif
+
   fmt = MBWhich(&fmtMB);
   col = MBWhich(&colMB);
 
@@ -1116,7 +1176,34 @@ int DoSave()
   }
 #endif
 
+#ifdef HAVE_PNG
+  else if (fmt == F_PNG) {   /* PNG */
+    PNGSaveParams(fullname, col);
+    PNGDialog(1);                   /* open PNG Dialog box */
+    dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
+    return 0;                      /* always 'succeeds' */
+  }
+#endif
 
+#ifdef HAVE_PIC2
+  else if (fmt == F_PIC2) {   /* PIC2 */
+    if (PIC2SaveParams(fullname, col) < 0)
+	return 0;
+    PIC2Dialog(1);                   /* open PIC2 Dialog box */
+    dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
+    return 0;                      /* always 'succeeds' */
+  }
+#endif /* HAVE_PIC2 */
+
+#ifdef HAVE_MGCSFX
+  else if (fmt == F_MGCSFX) {   /* MGCSFX */
+    if (MGCSFXSaveParams(fullname, col) < 0)
+	return 0;
+    MGCSFXDialog(1);                   /* open MGCSFX Dialog box */
+    dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
+    return 0;                      /* always 'succeeds' */
+  }
+#endif /* HAVE_MGCSFX */
 
 
   WaitCursor();
@@ -1164,6 +1251,10 @@ int DoSave()
     rv = WriteBMP   (fp, thepic, ptype, w, h, rp, gp, bp, nc, col);
     break;
 
+  case F_WBMP:
+    rv = WriteWBMP  (fp, thepic, ptype, w, h, rp, gp, bp, nc, col);
+    break;
+
   case F_IRIS:
     rv = WriteIRIS  (fp, thepic, ptype, w, h, rp, gp, bp, nc, col);
     break;
@@ -1181,6 +1272,35 @@ int DoSave()
     rv = WriteFITS  (fp, thepic, ptype, w, h, rp, gp, bp, nc, col,
 		     picComments);
     break;
+
+  case F_ZX:		/* [JCE] Spectrum SCREEN$ */
+    rv = WriteZX    (fp, thepic, ptype, w, h, rp, gp, bp, nc, col,
+		     picComments);
+    break;
+#ifdef HAVE_MAG
+  case F_MAG:
+    rv = WriteMAG   (fp, thepic, ptype, w, h, rp, gp, bp, nc, col,
+		     picComments);
+    break;
+#endif /* HAVE_MAG */
+#ifdef HAVE_PIC
+  case F_PIC:
+    rv = WritePIC   (fp, thepic, ptype, w, h, rp, gp, bp, nc, col,
+		     picComments);
+    break;
+#endif /* HAVE_PIC */
+#ifdef HAVE_MAKI
+  case F_MAKI:
+    rv = WriteMAKI  (fp, thepic, ptype, w, h, rp, gp, bp, nc, col);
+    break;
+#endif /* HAVE_MAKI */
+
+#ifdef HAVE_PI
+  case F_PI:
+    rv = WritePi    (fp, thepic, ptype, w, h, rp, gp, bp, nc, col,
+		     picComments);
+    break;
+#endif /* HAVE_PI */
   }
 
 
@@ -1310,7 +1430,8 @@ void SetDirSaveMode(group, bnum)
 
   else if (group == F_FORMAT) {
     MBSelect(&fmtMB, bnum);
-    if (MBWhich(&fmtMB) == F_XBM) { /* turn off all but B/W */
+    if (MBWhich(&fmtMB) == F_XBM ||
+	MBWhich(&fmtMB) == F_WBMP) { /* turn off all but B/W */
       colMB.dim[F_FULLCOLOR] = 1;
       colMB.dim[F_GREYSCALE] = 1;
       colMB.dim[F_BWDITHER]  = 0;
@@ -1389,14 +1510,29 @@ static void changeSuffix()
       (strcmp(lowsuf,"eps" )==0) ||
       (strcmp(lowsuf,"rgb" )==0) ||
       (strcmp(lowsuf,"tga" )==0) ||
-      (strcmp(lowsuf,"xpm" )==0) ||
       (strcmp(lowsuf,"fits")==0) ||
       (strcmp(lowsuf,"fts" )==0) ||
+#ifdef HAVE_JPEG
       (strcmp(lowsuf,"jpg" )==0) ||
       (strcmp(lowsuf,"jpeg")==0) ||
       (strcmp(lowsuf,"jfif")==0) ||
+#endif
+#ifdef HAVE_TIFF
       (strcmp(lowsuf,"tif" )==0) ||
-      (strcmp(lowsuf,"tiff")==0)) {
+      (strcmp(lowsuf,"tiff")==0) ||
+#endif
+#ifdef HAVE_PNG
+      (strcmp(lowsuf,"png" )==0) ||
+#endif
+      (strcmp(lowsuf,"wbmp")==0) ||
+      (strcmp(lowsuf,"xpm" )==0) ||
+      (strcmp(lowsuf,"tiff")==0) ||
+      (strcmp(lowsuf,"mag" )==0) ||
+      (strcmp(lowsuf,"pic" )==0) ||
+      (strcmp(lowsuf,"mki" )==0) ||
+      (strcmp(lowsuf,"pi"  )==0) ||
+      (strcmp(lowsuf,"p2"  )==0) ||
+      (strcmp(lowsuf,"pcd" )==0)) {
 
     /* found one.  set lowsuf = to the new suffix, and tack on to filename */
 
@@ -1419,6 +1555,7 @@ static void changeSuffix()
     case F_XBM:      strcpy(lowsuf,"xbm");  break;
     case F_SUNRAS:   strcpy(lowsuf,"ras");  break;
     case F_BMP:      strcpy(lowsuf,"bmp");  break;
+    case F_WBMP:     strcpy(lowsuf,"wbmp"); break;
     case F_PS:       strcpy(lowsuf,"ps");   break;
     case F_IRIS:     strcpy(lowsuf,"rgb");  break;
     case F_TARGA:    strcpy(lowsuf,"tga");  break;
@@ -1432,7 +1569,32 @@ static void changeSuffix()
 #ifdef HAVE_TIFF
     case F_TIFF:     strcpy(lowsuf,"tif");  break;
 #endif
+
+#ifdef HAVE_PNG
+    case F_PNG:      strcpy(lowsuf,"png");  break;
+#endif
+
+#ifdef HAVE_MAG
+    case F_MAG:      strcpy(lowsuf,"mag");  break;
+#endif
+
+#ifdef HAVE_PIC
+    case F_PIC:      strcpy(lowsuf,"pic");  break;
+#endif
+
+#ifdef HAVE_MAKI
+    case F_MAKI:     strcpy(lowsuf,"mki");  break;
+#endif
+
+#ifdef HAVE_PI
+    case F_PI:       strcpy(lowsuf,"pi");   break;
+#endif
+
+#ifdef HAVE_PIC2
+    case F_PIC2:     strcpy(lowsuf,"p2");   break;
+#endif
     }
+
 
     if (allcaps) {  /* upper-caseify lowsuf */
       for (sp=lowsuf; *sp; sp++)
@@ -1497,6 +1659,11 @@ static int FNameCdable()
   if ( rindex ( newpath, '/' ) == newpath ) {
     strcpy ( rindex ( newpath, '.' ), "/000000.DIR" );
   }
+#endif
+
+#ifdef AUTO_EXPAND
+  Mkvdir(newpath);
+  Dirtovd(newpath);
 #endif
 
   if (stat(newpath, &st)==0) {
@@ -1596,7 +1763,11 @@ FILE *OpenOutFile(filename)
   dopipe = 0;
 
   /* make sure we're in the correct directory */
+#ifdef AUTO_EXPAND
+  if (strlen(path)) Chvdir(path);
+#else
   if (strlen(path)) chdir(path);
+#endif
 
   if (ISPIPE(filename[0])) {   /* do piping */
     /* make up some bogus temp file to put this in */
@@ -2002,7 +2173,7 @@ void InitPoll()
     if (stat(namelist[curname], &origStat)==0) {
       haveStat = 1;
       if (DEBUG) fprintf(stderr," origStat.size=%ld,  origStat.mtime=%ld\n",
-			 origStat.st_size, origStat.st_mtime);
+			 (long)origStat.st_size, (long)origStat.st_mtime);
     }
   }
 }
@@ -2027,7 +2198,7 @@ int CheckPoll(del)
 
     if (stat(namelist[curname], &st)==0) {
       if (DEBUG) fprintf(stderr," st.size=%ld,  st.mtime=%ld\n",
-			 st.st_size, st.st_mtime);
+			 (long)st.st_size, (long)st.st_mtime);
 
       if ((st.st_size  == origStat.st_size) &&
 	  (st.st_mtime == origStat.st_mtime)) return 0;  /* no change */
@@ -2080,3 +2251,164 @@ void DIRCreatedFile(name)
 }
 
 
+#ifdef HAVE_PIC2
+/**** Stuff for PIC2Dialog box ****/
+FILE *pic2_OpenOutFile(filename, append)
+char *filename;
+int *append;
+{
+    /* opens file for output.  does various error handling bits.  Returns
+       an open file pointer if success, NULL if failure */
+
+    FILE *fp = NULL;
+    struct stat st;
+
+    if (!filename || filename[0] == '\0')
+	return (NULL);
+    strcpy(outFName, filename);
+    dopipe = 0;
+
+    /* make sure we're in the correct directory */
+#ifdef AUTO_EXPAND
+    if (strlen(path)) Chvdir(path);
+#else
+    if (strlen(path)) chdir(path);
+#endif
+
+    if (ISPIPE(filename[0])) {   /* do piping */
+	/* make up some bogus temp file to put this in */
+#ifndef VMS
+	sprintf(outFName, "%s/xvXXXXXX", tmpdir);
+#else
+	strcpy(outFName, "[]xvXXXXXX.lis");
+#endif
+#ifdef USE_MKSTEMP
+	fp = fdopen(mkstemp(outFName), "w");
+#else
+	mktemp(outFName);
+#endif
+	dopipe = 1;
+    }
+
+
+    /* see if file exists (i.e., we're overwriting) */
+    *append = 0;
+#ifdef USE_MKSTEMP
+    if (!dopipe)
+#endif
+    if (stat(outFName, &st)==0) {    /* stat succeeded, file must exist */
+	if (ReadFileType(outFName) != RFT_PIC2) {
+	    static char *foo[] = { "\nOk", "\033Cancel" };
+	    char str[512];
+
+	    sprintf(str,"Overwrite existing file '%s'?", outFName);
+	    if (PopUp(str, foo, 2))
+		return (NULL);
+	} else {
+	    static char *foo[] = { "\nOk", "\033Cancel" };
+	    char str[512];
+
+	    sprintf(str,"Append to existing file '%s'?", outFName);
+	    if (PopUp(str, foo, 2)) {
+		sprintf(str,"Overwrite existing file '%s'?", outFName);
+		if (PopUp(str, foo, 2))
+		    return (NULL);
+	    } else
+		*append = 1;
+	}
+    }
+
+    /* Open file */
+#ifdef USE_MKSTEMP
+    if (!dopipe)
+#endif
+    fp = *append ? fopen(outFName, "r+") : fopen(outFName, "w");
+    if (!fp) {
+	char  str[512];
+	sprintf(str,"Can't write file '%s'\n\n  %s.",outFName, ERRSTR(errno));
+	ErrPopUp(str, "\nBummer");
+	return (NULL);
+    }
+
+    return (fp);
+}
+
+
+/***************************************/
+void pic2_KillNullFile(fp)
+FILE *fp;
+{
+    fseek(fp, (size_t) 0, SEEK_END);
+    if (ftell(fp) > 0) {
+	fclose(fp);
+	return;
+    } else {
+	fclose(fp);
+	unlink(outFName);
+	return;
+    }
+}
+#endif /* HAVE_PIC2 */
+
+
+#ifdef HAVE_MGCSFX
+/**** Stuff for MGCSFX Dialog box ****/
+/***************************************/
+int OpenOutFileDesc(filename)
+     char *filename;
+{
+  /* opens file for output.  does various error handling bits.  Returns
+     an open file pointer if success, NULL if failure */
+
+  int         fd;
+  struct stat st;
+
+  if (!filename || filename[0] == '\0') return -1;
+  strcpy(outFName, filename);
+  dopipe = 0;
+
+  /* make sure we're in the correct directory */
+#ifdef AUTO_EXPAND
+  if (strlen(path)) Chvdir(path);
+#else
+  if (strlen(path)) chdir(path);
+#endif
+
+  if (ISPIPE(filename[0])) {   /* do piping */
+    /* make up some bogus temp file to put this in */
+#ifndef VMS
+    sprintf(outFName, "%s/xvXXXXXX", tmpdir);
+#else
+    strcpy(outFName, "[]xvXXXXXX.lis");
+#endif
+#ifdef USE_MKSTEMP
+    close(mkstemp(outFName));
+#else
+    mktemp(outFName);
+#endif
+    dopipe = 1;
+  }
+
+
+  /* if didn't just create it, see if file exists (i.e., we're overwriting) */
+  if (!dopipe && stat(outFName, &st)==0) {   /* stat succeeded, file exists */
+    static char *foo[] = { "\nOk", "\033Cancel" };
+    char str[512];
+
+    sprintf(str,"Overwrite existing file '%s'?", outFName);
+    if (PopUp(str, foo, 2)) return -1;
+  }
+
+
+  /* Open file */
+  fd = open(outFName, O_WRONLY | O_CREAT | O_TRUNC, (0644));
+  if (fd < 0) {
+    char  str[512];
+    sprintf(str,"Can't write file '%s'\n\n  %s.", outFName, ERRSTR(errno));
+    ErrPopUp(str, "\nBummer");
+    return -1;
+  }
+
+  return fd;
+}
+#endif /* HAVE_MGCSFX */

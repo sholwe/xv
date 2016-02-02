@@ -34,7 +34,7 @@
 #define MAXCOLS  128
 
 /* some VMS thing... */
-#ifdef vax11c
+#if defined(vax11c) || (defined(__sony_news) && (defined(bsd43) || defined(__bsd43) || defined(SYSTYPE_BSD) || defined(__SYSTYPE_BSD)))
 #include <ctype.h>
 #endif
 

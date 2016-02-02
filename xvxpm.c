@@ -175,7 +175,15 @@ int LoadXPM(fname, pinfo)
 
     do {
       char  key[3];
-      char  color[40];	/* Need to figure a good size for this... */
+      char  color[80];	/* Need to figure a good size for this... */
+
+/*
+ *  Problem with spaces in color names
+ *
+ *    X s Color Name m Other Name c Last Name
+ *
+ *  ... this parser doesn't find `Any Name'
+ */
 
       for (j=0; j<2 && (c != ' ') && (c != '\t') && (c != EOF); j++) {
 	key[j] = c;
@@ -187,7 +195,7 @@ int LoadXPM(fname, pinfo)
       if (c == EOF)	/* The failure condition of getc() */
 	return (XpmLoadError(bname, "Error parsing colormap line"));
 
-      for (j=0; j<39 && (c!=' ') && (c!='\t') && (c!='"') && c!=EOF; j++) {
+      for (j=0; j<79 && (c!=' ') && (c!='\t') && (c!='"') && c!=EOF; j++) {
 	color[j] = c;
 	c = XpmGetc(fp);
       }
@@ -248,7 +256,7 @@ int LoadXPM(fname, pinfo)
       else {      /* 'None' or unrecognized color spec */
 	int rgb;
 
-	if (strcmp(color, "None") == 0) rgb = 0xb2c0dc;  /* infobg */
+	if (strcasecmp(color, "None") == 0) rgb = 0xb2c0dc;  /* infobg */
 	else {
 	  SetISTR(ISTR_INFO, "%s:  unknown color spec '%s'", bname, color);
 	  Timer(1000);
@@ -321,7 +329,8 @@ int LoadXPM(fname, pinfo)
 	*i_sptr++ = mapentry->cv_rgb[2];
       }
     }  /* for ( j < w ) */
-    (void)XpmGetc(fp);		/* Throw away the close " */
+    while (((c = XpmGetc(fp))!=EOF) &&		/* Throw away the close " and */
+	(c != '"'));				/* erase all remaining pixels */
 
     if (!(i%7)) WaitCursor();
   }  /* for ( i < h ) */

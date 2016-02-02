@@ -50,6 +50,7 @@ int BitOffset = 0,		/* Bit Offset of next code */
     BytesPerScanline,		/* bytes per scanline in output raster */
     ColorMapSize,		/* number of colors */
     Background,			/* background color */
+    Transparent,		/* transparent color (GRR 19980314) */
     CodeSize,			/* Code size, read from GIF header */
     InitCodeSize,		/* Starting code size, used during Clear */
     Code,			/* Value returned by ReadCode */
@@ -111,16 +112,20 @@ int LoadGIF(fname, pinfo)
 
   register byte  ch, *origptr;
   register int   i, block;
-  int            aspect, gotimage;
+  int            aspect;
+  char tmpname[256];
+  byte r[256], g[256], b[256];
 
   /* initialize variables */
-  BitOffset = XC = YC = OutCount = gotimage = 0;
+  BitOffset = XC = YC = OutCount = 0;
   Pass = -1;
   RawGIF = Raster = pic8 = NULL;
   gif89 = 0;
+  Transparent = -1;
 
   pinfo->pic     = (byte *) NULL;
   pinfo->comment = (char *) NULL;
+  pinfo->numpages= 0;
 
   bname = BaseName(fname);
   fp = xv_fopen(fname,"r");
@@ -145,7 +150,7 @@ int LoadGIF(fname, pinfo)
 
   if (fread(dataptr, (size_t) filesize, (size_t) 1, fp) != 1)
     return( gifError(pinfo, "GIF data read failed") );
-
+  fclose(fp);
 
   origptr = dataptr;
 
@@ -161,6 +166,7 @@ int LoadGIF(fname, pinfo)
   RWidth = ch + 0x100 * NEXTBYTE;	/* screen dimensions... not used. */
   ch = NEXTBYTE;
   RHeight = ch + 0x100 * NEXTBYTE;
+  if (DEBUG) fprintf(stderr,"GIF89 logical screen = %d x %d\n",RWidth,RHeight);
 
   ch = NEXTBYTE;
   HasColormap = ((ch & COLORMAPMASK) ? True : False);
@@ -176,6 +182,8 @@ int LoadGIF(fname, pinfo)
     if (!gif89) return(gifError(pinfo,"corrupt GIF file (screen descriptor)"));
     else normaspect = (float) (aspect + 15) / 64.0;   /* gif89 aspect ratio */
     if (DEBUG) fprintf(stderr,"GIF89 aspect = %f\n", normaspect);
+    /* FIXME:  apparently this _should_ apply to all frames in a multi-image
+     *         GIF (i.e., PgUp/PgDn), but it doesn't */
   }
 
 
@@ -183,20 +191,23 @@ int LoadGIF(fname, pinfo)
 
   if (HasColormap)
     for (i=0; i<ColorMapSize; i++) {
-      pinfo->r[i] = NEXTBYTE;
-      pinfo->g[i] = NEXTBYTE;
-      pinfo->b[i] = NEXTBYTE;
+      r[i] = NEXTBYTE;
+      g[i] = NEXTBYTE;
+      b[i] = NEXTBYTE;
     }
   else {  /* no colormap in GIF file */
     /* put std EGA palette (repeated 16 times) into colormap, for lack of
        anything better to do */
 
     for (i=0; i<256; i++) {
-      pinfo->r[i] = EGApalette[i&15][0];
-      pinfo->g[i] = EGApalette[i&15][1];
-      pinfo->b[i] = EGApalette[i&15][2];
+      r[i] = EGApalette[i&15][0];
+      g[i] = EGApalette[i&15][1];
+      b[i] = EGApalette[i&15][2];
     }
   }
+  memcpy(pinfo->r, r, sizeof r);
+  memcpy(pinfo->g, g, sizeof g);
+  memcpy(pinfo->b, b, sizeof b);
 
   /* possible things at this point are:
    *   an application extension block
@@ -334,12 +345,28 @@ int LoadGIF(fname, pinfo)
 	if (DEBUG) fprintf(stderr,"Graphic Control extension\n\n");
 
 	SetISTR(ISTR_INFO, "%s:  %s", bname,
-		"Graphic Control Extension in GIF file.  Ignored.");
+		"Graphic Control Extension ignored.");
 
-	/* read (and ignore) data sub-blocks */
+	/* read (and ignore) data sub-blocks, unless compositing with
+         * user-defined background */
 	do {
-	  j = 0; sbsize = NEXTBYTE;
-	  while (j<sbsize) { SKIPBYTE;  j++; }
+	  j = 0;
+	  sbsize = NEXTBYTE;
+	  /* GRR 19980314:  get transparent index out of block */
+	  if (have_imagebg && sbsize == 4 && Transparent < 0) {
+	    byte packed_fields = NEXTBYTE;
+
+	    j++;
+	    SKIPBYTE;  j++;
+	    SKIPBYTE;  j++;
+	    if (packed_fields & 1) {
+	      Transparent = NEXTBYTE;
+	      j++;
+	    }
+	  }
+	  while (j<sbsize) {
+	    SKIPBYTE;  j++;
+	  }
 	} while (sbsize);
       }
 
@@ -376,36 +403,42 @@ int LoadGIF(fname, pinfo)
 
 
     else if (block == IMAGESEP) {
-      if (DEBUG) fprintf(stderr,"imagesep (got=%d)  ",gotimage);
+      if (DEBUG) fprintf(stderr,"imagesep (page=%d)  ",pinfo->numpages+1);
       if (DEBUG) fprintf(stderr,"  at start: offset=0x%x\n",dataptr-RawGIF);
 
-      if (gotimage) {   /* just skip over remaining images */
-	int i,misc,ch,ch1;
+      BitOffset = XC = YC = Pass = OutCount = 0;
 
-	/* skip image header */
-	SKIPBYTE;  SKIPBYTE;  /* left position */
-	SKIPBYTE;  SKIPBYTE;  /* top position */
-	SKIPBYTE;  SKIPBYTE;  /* width */
-	SKIPBYTE;  SKIPBYTE;  /* height */
-	misc = NEXTBYTE;      /* misc. bits */
-
-	if (misc & 0x80) {    /* image has local colormap.  skip it */
-	  for (i=0; i< 1 << ((misc&7)+1);  i++) {
-	    SKIPBYTE;  SKIPBYTE;  SKIPBYTE;
+      if (pinfo->numpages > 0) {   /* do multipage stuff */
+	if (pinfo->numpages == 1) {    /* first time only... */
+	  xv_mktemp(pinfo->pagebname, "xvpgXXXXXX");
+	  if (pinfo->pagebname[0] == '\0') {
+	    ErrPopUp("LoadGIF: Unable to create temporary filename???",
+			"\nHow unlikely!");
+	    return 0;
 	  }
 	}
-
-	SKIPBYTE;       /* minimum code size */
-
-	/* skip image data sub-blocks */
-	do {
-	  ch = ch1 = NEXTBYTE;
-	  while (ch--) SKIPBYTE;
-	  if ((dataptr - RawGIF) > filesize) break;      /* EOF */
-	} while(ch1);
+	sprintf(tmpname, "%s%d", pinfo->pagebname, pinfo->numpages);
+	fp = xv_fopen(tmpname, "w");
+	if (!fp) {
+	  ErrPopUp("LoadGIF: Unable to open temp file", "\nDang!");
+	  return 0;
+	}
+	if (WriteGIF(fp, pinfo->pic, pinfo->type, pinfo->w, pinfo->h, pinfo->r,
+		 pinfo->g, pinfo->b, numcols, pinfo->colType, NULL)) {
+	  fclose(fp);
+	  ErrPopUp("LoadGIF: Error writing temp file", "\nBummer!");
+	  return 0;
+	}
+	fclose(fp);
+	free(pinfo->pic);
+	pinfo->pic = (byte *) NULL;
+	if (HasColormap) {
+	  memcpy(pinfo->r, r, sizeof r);
+	  memcpy(pinfo->g, g, sizeof g);
+	  memcpy(pinfo->b, b, sizeof b);
+	}
       }
-
-      else if (readImage(pinfo)) gotimage = 1;
+      if (readImage(pinfo)) pinfo->numpages++;
       if (DEBUG) fprintf(stderr,"  at end:   dataptr=0x%x\n",dataptr-RawGIF);
     }
 
@@ -425,7 +458,7 @@ int LoadGIF(fname, pinfo)
 	sprintf(str, "Unknown block type (0x%02x) at offset 0x%x",
 		block, (dataptr - origptr) - 1);
 
-	if (!gotimage) return gifError(pinfo, str);
+	if (!pinfo->numpages) return gifError(pinfo, str);
 	else gifWarning(str);
       }
 
@@ -438,8 +471,34 @@ int LoadGIF(fname, pinfo)
   free(RawGIF);	 RawGIF = NULL;
   free(Raster);  Raster = NULL;
 
-  if (!gotimage)
+  if (!pinfo->numpages)
      return( gifError(pinfo, "no image data found in GIF file") );
+  if (pinfo->numpages > 1) {
+    /* write the last page temp file */
+    int numpages = pinfo->numpages;
+    char *comment = pinfo->comment;
+    sprintf(tmpname, "%s%d", pinfo->pagebname, pinfo->numpages);
+    fp = xv_fopen(tmpname, "w");
+    if (!fp) {
+      ErrPopUp("LoadGIF: Unable to open temp file", "\nDang!");
+      return 0;
+    }
+    if (WriteGIF(fp, pinfo->pic, pinfo->type, pinfo->w, pinfo->h, pinfo->r,
+		 pinfo->g, pinfo->b, numcols, pinfo->colType, NULL)) {
+      fclose(fp);
+      ErrPopUp("LoadGIF: Error writing temp file", "\nBummer!");
+      return 0;
+    }
+    fclose(fp);
+    free(pinfo->pic);
+    pinfo->pic = (byte *) NULL;
+
+    /* load the first page temp file */
+    sprintf(tmpname, "%s%d", pinfo->pagebname, 1);
+    i = LoadGIF(tmpname, pinfo);
+    pinfo->numpages = numpages;
+    pinfo->comment = comment;
+  }
 
   return 1;
 }
@@ -481,6 +540,17 @@ static int readImage(pinfo)
     /* no global or local colormap */
     SetISTR(ISTR_WARNING, "%s:  %s", bname,
 	    "No colormap in this GIF file.  Assuming EGA colors.");
+  }
+
+
+  /* GRR 19980314 */
+  /* need not worry about size of EGA palette:  full 256 colors */
+  if (have_imagebg && Transparent >= 0 &&
+      Transparent < ((Misc&0x80)? (1 << ((Misc&7)+1)) : ColorMapSize) )
+  {
+    pinfo->r[Transparent] = (imagebgR >> 8);
+    pinfo->g[Transparent] = (imagebgG >> 8);
+    pinfo->b[Transparent] = (imagebgB >> 8);
   }
 
 
@@ -540,7 +610,7 @@ static int readImage(pinfo)
     return( gifError(pinfo, "image dimensions out of range") );
   picptr = pic8 = (byte *) malloc((size_t) maxpixels);
   if (!pic8) FatalError("LoadGIF: couldn't malloc 'pic8'");
-	        
+
 
 
   /* Decompress the file, continuing until you see the GIF EOF code.
@@ -642,10 +712,9 @@ static int readImage(pinfo)
     SetISTR(ISTR_WARNING,"%s:  %s", bname,
 	    "This GIF file seems to be truncated.  Winging it.");
     if (!Interlace)  /* clear->EOBuffer */
-      xvbzero((char *) pic8+npixels, (size_t) (maxpixels-npixels));
+      xvbzero((char *) pic8+npixels,
+	      (size_t) (maxpixels-npixels<0 ? 0 : maxpixels-npixels));
   }
-
-  fclose(fp);
 
   /* fill in the PICINFO structure */
 

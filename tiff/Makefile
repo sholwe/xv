@@ -38,7 +38,7 @@ RANLIB=	./RANLIB.sh
 IPATH= -I.
 
 COPTS=	-O
-CFLAGS=	${COPTS} ${IPATH}
+CFLAGS=	${COPTS} ${IPATH} -D_BSD_SOURCE
 
 INCS=	tiff.h tiffio.h
 

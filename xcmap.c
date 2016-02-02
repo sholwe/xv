@@ -163,7 +163,7 @@ int main(argc, argv)
   XSetBackground(theDisp,theGC,bcol);
 
   CreateMainWindow(cmd,geom,argc,argv);
-  Resize(WIDE,HIGH);
+  Resize((int)WIDE,(int)HIGH);
 
   XSelectInput(theDisp, mainW, ExposureMask | KeyPressMask
 	       | StructureNotifyMask | ButtonPressMask);
@@ -212,10 +212,10 @@ static void HandleEvent(event)
 
   case ConfigureNotify: {
     XConfigureEvent *conf_event = (XConfigureEvent *) event;
+    int w = conf_event->width, h = conf_event->height;
 
-    if (conf_event->window == mainW &&
-	(conf_event->width != WIDE || conf_event->height != HIGH))
-      Resize(conf_event->width, conf_event->height);
+    if (conf_event->window == mainW && (w != WIDE || h != HIGH))
+      Resize((int)(w ? w : WIDE), (int)(h ? h : HIGH));
   }
     break;
 
@@ -274,6 +274,8 @@ static void CreateMainWindow(name,geom,argc,argv)
   WIDE = HIGH = 256;			/* default window size */
 
   x=y=w=h=1;
+  hints.flags = 0;
+
   i=XParseGeometry(geom,&x,&y,&w,&h);
   if (i&WidthValue)
   {

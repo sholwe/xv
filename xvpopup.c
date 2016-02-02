@@ -23,7 +23,7 @@
 #define OMIT_ICON_BITS
 #include "bits/icon"   /* icon_bits[] not used, but icon_width/height are */
 
-#define PUWIDE 400
+#define PUWIDE 480
 #define PUHIGH 170
 
 #define PAD_PUWIDE 480
@@ -201,14 +201,14 @@ static int doPopUp(txt, labels, n, poptyp, wname)
 
     if (!padHaveDooDads) {
       DCreate(&padWDial, popW, 16,      puhigh-16-100-1,75,100,
-	      1, 2048, pWIDE, 10,
+	      1.0, 2048.0, (double)pWIDE, 1.0, 10.0,
 	      infofg, infobg, hicol, locol, "Width", NULL);
       DCreate(&padHDial, popW, 16+1+75, puhigh-16-100-1,75,100,
-	      1, 2048, pHIGH, 10,
+	      1.0, 2048.0, (double)pHIGH, 1.0, 10.0,
 	      infofg, infobg, hicol, locol, "Height", NULL);
 
       DCreate(&padODial, popW, 16+1+75+75+9, puhigh-16-100-1,75,100,
-	      0, 100, 100, 10,
+	      0.0, 100.0, 100.0, 1.0, 10.0,
 	      infofg, infobg, hicol, locol, "Opaque", NULL);
 
       MBCreate(&padMthdMB, popW, 100-2+44, 10, 140, 19, NULL,
@@ -259,9 +259,9 @@ static int doPopUp(txt, labels, n, poptyp, wname)
   else if (poptyp == ISPAD) {
     BTSetActive(&bts[0], (int) strlen(gsBuf));
     i = pWIDE * 3;  RANGE(i,2048,9999);
-    DSetRange(&padWDial, 1, i, padWDial.val, 10);
+    DSetRange(&padWDial, 1.0, (double)i, padWDial.val, 1.0, 10.0);
     i = pHIGH * 3;  RANGE(i,2048,9999);
-    DSetRange(&padHDial, 1, i, padHDial.val, 10);
+    DSetRange(&padHDial, 1.0, (double)i, padHDial.val, 1.0, 10.0);
 
     DSetActive(&padWDial, (padMode!=PAD_LOAD));  /* DSetRange activates dial */
     DSetActive(&padHDial, (padMode!=PAD_LOAD));
@@ -287,15 +287,19 @@ static int doPopUp(txt, labels, n, poptyp, wname)
   /* center first button in window around mouse position, with constraint that
      window be fully on the screen */
 
-  CenterMapWindow(popW, 40 + bts[0].x, BUTTH/2 + bts[0].y, puwide, puhigh);
   popUp = poptyp;
+  if (startGrab == 2)
+    startGrab = 4;
+  else {
+    CenterMapWindow(popW, 40 + bts[0].x, BUTTH/2 + bts[0].y, puwide, puhigh);
 
-  /* MUST wait for VisibilityNotify event to come in, else we run the risk
-     of UnMapping the window *before* the Map request completed.  This
-     appears to be bad, (It leaves an empty window frame up.) though it
-     generally only happens on slow servers.  Better safe than screwed... */
+    /* MUST wait for VisibilityNotify event to come in, else we run the risk
+       of UnMapping the window *before* the Map request completed.  This
+       appears to be bad, (It leaves an empty window frame up.) though it
+       generally only happens on slow servers.  Better safe than screwed... */
 
-  XWindowEvent(theDisp, popW, VisibilityChangeMask, &event);
+    XWindowEvent(theDisp, popW, VisibilityChangeMask, &event);
+  }
 
   /* block until this window gets closed */
   while (popUp) {
@@ -466,9 +470,9 @@ int PadPopUp(pMode, pStr, pWide,pHigh, pOpaque, pOmode)
   changedGSBuf();      /* careful!  popW doesn't exist yet! */
 
   if (padHaveDooDads) {
-    oldW = padWDial.val;
-    oldH = padHDial.val;
-    oldO = padODial.val;
+    oldW = (int)padWDial.val;
+    oldH = (int)padHDial.val;
+    oldO = (int)padODial.val;
   }
   else { oldW = pWIDE;  oldH = pHIGH;  oldO = 100; }
 
@@ -487,9 +491,9 @@ int PadPopUp(pMode, pStr, pWide,pHigh, pOpaque, pOmode)
   }
 
   if (rv == 1) {   /* cancelled:  restore normal values */
-    DSetVal(&padWDial, oldW);
-    DSetVal(&padHDial, oldH);
-    DSetVal(&padODial, oldO);
+    DSetVal(&padWDial, (double)oldW);
+    DSetVal(&padHDial, (double)oldH);
+    DSetVal(&padODial, (double)oldO);
   }
 
   XUnmapWindow(theDisp, padWDial.win);
@@ -499,9 +503,9 @@ int PadPopUp(pMode, pStr, pWide,pHigh, pOpaque, pOmode)
   /* load up return values */
   *pMode   = padMode;
   *pStr    = padBuf;
-  *pWide   = padWDial.val;
-  *pHigh   = padHDial.val;
-  *pOpaque = padODial.val;
+  *pWide   = (int)padWDial.val;
+  *pHigh   = (int)padHDial.val;
+  *pOpaque = (int)padODial.val;
   *pOmode  = padOMode;
 
   return rv;
@@ -956,14 +960,14 @@ static void clickPUD(x,y)
      int x,y;
 {
   int i;
-  BUTT *bp;
+  BUTT *bp = NULL;
 
   for (i=0; i<nbts; i++) {
     bp = &bts[i];
     if (PTINRECT(x, y, bp->x, bp->y, bp->w, bp->h)) break;
   }
 
-  if (i<nbts && BTTrack(bp)) {
+  if (i<nbts && bp && BTTrack(bp)) {
     popUp = 0;  selected = i;  return;
   }
 
@@ -972,8 +976,8 @@ static void clickPUD(x,y)
   else if (popUp == ISPAD) {
     if (PTINRECT(x, y, padDButt.x, padDButt.y, padDButt.w, padDButt.h)) {
       if (BTTrack(&padDButt)) {
-	DSetVal(&padWDial, pWIDE);
-	DSetVal(&padHDial, pHIGH);
+	DSetVal(&padWDial, (double)pWIDE);
+	DSetVal(&padHDial, (double)pHIGH);
       }
     }
 
@@ -1105,7 +1109,7 @@ static int doGSKey(c)
   }
 
 
-  else if (c=='\010' || c=='\177') {    /* BS or DEL */
+  else if (c=='\010') {                 /* BS */
     if (gsCurPos==0) return 1;                     /* at beginning of str */
     xvbcopy(&gsBuf[gsCurPos], &gsBuf[gsCurPos-1], (size_t) len-gsCurPos+1);
     gsCurPos--;
@@ -1128,7 +1132,7 @@ static int doGSKey(c)
     gsCurPos = len;
   }
 
-  else if (c=='\004') {                 /* ^D: delete character at gsCurPos */
+  else if (c=='\004' || c=='\177') {    /* ^D or DEL: delete character at gsCurPos */
     if (gsCurPos==len) return 1;
     xvbcopy(&gsBuf[gsCurPos+1], &gsBuf[gsCurPos], (size_t) len-gsCurPos);
   }

@@ -105,7 +105,7 @@ byte *Smooth24(pic824, is24, swide, shigh, dwide, dhigh, rmap, gmap, bmap)
     /* we can save a lot of time by precomputing cxtab[] and pxtab[], both
        dwide arrays of ints that contain values for the equations:
          cx = (ex * swide) / dwide;
-         px = ((ex * swide * 100) / dwide) - (cx * 100) - 50; */
+         px = ((ex * swide * 128) / dwide) - (cx * 128) - 64; */
 
     cxtab = (int *) malloc(dwide * sizeof(int));
     if (!cxtab) { free(pic24);  return NULL; }
@@ -115,8 +115,8 @@ byte *Smooth24(pic824, is24, swide, shigh, dwide, dhigh, rmap, gmap, bmap)
 
     for (ex=0; ex<dwide; ex++) {
       cxtab[ex] = (ex * swide) / dwide;
-      pxtab[ex] = (((ex * swide)* 100) / dwide)
-	           - (cxtab[ex] * 100) - 50;
+      pxtab[ex] = (((ex * swide)* 128) / dwide)
+	           - (cxtab[ex] * 128) - 64;
     }
 
     for (ey=0; ey<dhigh; ey++) {
@@ -125,7 +125,7 @@ byte *Smooth24(pic824, is24, swide, shigh, dwide, dhigh, rmap, gmap, bmap)
       ProgressMeter(0, (dhigh)-1, ey, "Smooth");
 
       cy = (ey * shigh) / dhigh;
-      py = (((ey * shigh) * 100) / dhigh) - (cy * 100) - 50;
+      py = (((ey * shigh) * 128) / dhigh) - (cy * 128) - 64;
       if (py<0) { y1 = cy-1;  if (y1<0) y1=0; }
            else { y1 = cy+1;  if (y1>shigh-1) y1=shigh-1; }
 
@@ -172,30 +172,30 @@ byte *Smooth24(pic824, is24, swide, shigh, dwide, dhigh, rmap, gmap, bmap)
 	else {
 	  /* compute weighting factors */
 	  apx = abs(px);  apy = abs(py);
-	  pA = (apx * apy) / 100;
-	  pB = (apy * (100 - apx)) / 100;
-	  pC = (apx * (100 - apy)) / 100;
-	  pD = 100 - (pA + pB + pC);
+	  pA = (apx * apy) >> 7; /* div 128 */
+	  pB = (apy * (128 - apx)) >> 7; /* div 128 */
+	  pC = (apx * (128 - apy)) >> 7; /* div 128 */
+	  pD = 128 - (pA + pB + pC);
 
 	  if (is24) {
-	    *pp++ = ((int) (pA * rA))/100 + ((int) (pB * rB))/100 +
-	            ((int) (pC * rC))/100 + ((int) (pD * rD))/100;
+	    *pp++ = (((int) (pA * rA))>>7) + (((int) (pB * rB))>>7) +
+	            (((int) (pC * rC))>>7) + (((int) (pD * rD))>>7);
 
-	    *pp++ = ((int) (pA * gA))/100 + ((int) (pB * gB))/100 +
-	            ((int) (pC * gC))/100 + ((int) (pD * gD))/100;
+	    *pp++ = (((int) (pA * gA))>>7) + (((int) (pB * gB))>>7) +
+	            (((int) (pC * gC))>>7) + (((int) (pD * gD))>>7);
 
-	    *pp++ = ((int) (pA * bA))/100 + ((int) (pB * bB))/100 +
-	            ((int) (pC * bC))/100 + ((int) (pD * bD))/100;
+	    *pp++ = (((int) (pA * bA))>>7) + (((int) (pB * bB))>>7) +
+	            (((int) (pC * bC))>>7) + (((int) (pD * bD))>>7);
 	  }
 	  else {  /* 8-bit pic */
-	    *pp++ = ((int) (pA * rmap[cA]))/100 + ((int)(pB * rmap[cB]))/100 +
-	            ((int) (pC * rmap[cC]))/100 + ((int)(pD * rmap[cD]))/100;
+	    *pp++ = (((int)(pA * rmap[cA]))>>7) + (((int)(pB * rmap[cB]))>>7) +
+	            (((int)(pC * rmap[cC]))>>7) + (((int)(pD * rmap[cD]))>>7);
 
-	    *pp++ = ((int) (pA * gmap[cA]))/100 + ((int)(pB * gmap[cB]))/100 +
-	            ((int) (pC * gmap[cC]))/100 + ((int)(pD * gmap[cD]))/100;
+	    *pp++ = (((int)(pA * gmap[cA]))>>7) + (((int)(pB * gmap[cB]))>>7) +
+	            (((int)(pC * gmap[cC]))>>7) + (((int)(pD * gmap[cD]))>>7);
 
-	    *pp++ = ((int)(pA * bmap[cA]))/100 + ((int)(pB * bmap[cB]))/100 +
-  	            ((int)(pC * bmap[cC]))/100 + ((int)(pD * bmap[cD]))/100;
+	    *pp++ = (((int)(pA * bmap[cA]))>>7) + (((int)(pB * bmap[cB]))>>7) +
+  	            (((int)(pC * bmap[cC]))>>7) + (((int)(pD * bmap[cD]))>>7);
 	  }
 	}
       }

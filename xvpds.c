@@ -77,8 +77,7 @@
  * Huffman-encoded, and the encoding histogram follows the ASCII headers.
  * To decode these, we use a slightly modified version of "vdcomp.c" from the
  * NASA Viking CD-ROMS.  For xv to work, you need to have vdcomp compiled
- * and in your search path.  vdcomp.c should be included with this
-distribution.
+ * and in your search path.  vdcomp.c should be included with this distribution.
  *
  * I've heard that newer discs have FITS images on them.  If they do, support
  * for them will be added when I get one.  Until then, you can use fitstopgm.
@@ -102,7 +101,7 @@ distribution.
  * This software is provided "as is" without any express or implied warranty.
  */
 
-
+#define  NEEDSDIR       /* for S_IRUSR|S_IWUSR */
 #include "xv.h"
 
 #ifdef HAVE_PDS
@@ -129,27 +128,32 @@ distribution.
 
 /* This is arbitrary.  Everything I've seen so far fits in 50 chars */
 #define COMMENTSIZE	50
+#define INOTESIZE	1000
 
 
 static int	lastwasinote = FALSE;
-static char	scanbuff         [MAX_SIZE],
-                rtbuff         [RTBUFFSIZE],
-		inote	   [20*COMMENTSIZE],
-                infobuff      [COMMENTSIZE],
-		spacecraft    [COMMENTSIZE],
-		target        [COMMENTSIZE],
-		filtname      [COMMENTSIZE],
-		gainmode      [COMMENTSIZE],
-		editmode      [COMMENTSIZE],
-		scanmode      [COMMENTSIZE],
-		exposure      [COMMENTSIZE],
-		shuttermode   [COMMENTSIZE],
-		mphase        [COMMENTSIZE],
-		iname         [COMMENTSIZE],
-		itime         [COMMENTSIZE],
-                garbage       [1020],
+static char	scanbuff         [MAX_SIZE+1],
+                rtbuff         [RTBUFFSIZE+1],
+		inote	        [INOTESIZE+1],
+                infobuff      [COMMENTSIZE+1],
+		spacecraft    [COMMENTSIZE+1],
+		target        [COMMENTSIZE+1],
+		filtname      [COMMENTSIZE+1],
+		gainmode      [COMMENTSIZE+1],
+		editmode      [COMMENTSIZE+1],
+		scanmode      [COMMENTSIZE+1],
+		exposure      [COMMENTSIZE+1],
+		shuttermode   [COMMENTSIZE+1],
+		mphase        [COMMENTSIZE+1],
+		iname         [COMMENTSIZE+1],
+		itime         [COMMENTSIZE+1],
+                garbage       [1024],
 		*tmptmp,
 		pdsuncompfname[FNAMESIZE];
+
+#define SSTR(l)			"%" #l "s"
+#define S(l)			SSTR(l)
+
 byte *image;
 static int elaphe;
 
@@ -251,6 +255,9 @@ int LoadPDS(fname, pinfo)
   /* returns '1' on success, '0' on failure */
 
   int tempnum, bytewidth, bufsize;
+#ifndef USE_MKSTEMP
+  int tmpfd;
+#endif
   FILE	*zf;
   static int isfixed,teco,i,j,itype,vaxbyte,
              recsize,hrecsize,irecsize,isimage,labelrecs,labelsofar,
@@ -397,7 +404,7 @@ int LoadPDS(fname, pinfo)
 
       if (strcmp(scanbuff,"END") == 0) {
 	break;
-      } else if (sscanf(scanbuff," RECORD_TYPE = %s",rtbuff) == 1) {
+      } else if (sscanf(scanbuff, " RECORD_TYPE = " S(RTBUFFSIZE), rtbuff) == 1) {
 	if (strncmp(rtbuff,"VARIABLE_LENGTH", (size_t) 15) == 0) {
 	  /*		itype=PDSVARIABLE; */
 	} else if (strncmp(rtbuff,"FIXED_LENGTH", (size_t) 12) == 0) {
@@ -416,7 +423,7 @@ int LoadPDS(fname, pinfo)
 	    if (irecsize == 0) irecsize=recsize;
 	lastwasinote=FALSE;
 	continue;
-      } else if (sscanf(scanbuff," FILE_TYPE = %s", rtbuff) != 0) {
+      } else if (sscanf(scanbuff, " FILE_TYPE = " S(RTBUFFSIZE), rtbuff) != 0) {
 	lastwasinote=FALSE;
 	if (strncmp(rtbuff,"IMAGE", (size_t) 5) == 0) {
 	  isimage=TRUE;
@@ -445,74 +452,74 @@ int LoadPDS(fname, pinfo)
 	lastwasinote=FALSE; continue;
       } else if (sscanf(scanbuff," SAMPLE_BITS = %d", &samplesize) == 1) {
 	lastwasinote=FALSE; continue;
-      } else if (sscanf(scanbuff," SAMPLE_TYPE = %s", sampletype) == 1) {
+      } else if (sscanf(scanbuff, " SAMPLE_TYPE = " S(64), sampletype) == 1) {
 	lastwasinote=FALSE; continue;
-      } else if (sscanf(scanbuff," SPACECRAFT_NAME = %s %s",
+      } else if (sscanf(scanbuff," SPACECRAFT_NAME = " S(COMMENTSIZE) " " S(1023),
 			spacecraft,garbage) == 2 ) {
-	strcat(spacecraft,xv_strstr(scanbuff, spacecraft)+strlen(spacecraft));
+	const char *tmp = xv_strstr(scanbuff, spacecraft) + strlen(spacecraft);
+	strncat(spacecraft, tmp, COMMENTSIZE - strlen(spacecraft));
 	lastwasinote=FALSE;  continue;
-      } else if (sscanf(scanbuff," SPACECRAFT_NAME = %s", spacecraft) == 1) {
+      } else if (sscanf(scanbuff, " SPACECRAFT_NAME = " S(COMMENTSIZE), spacecraft) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," TARGET_NAME = %s", target) == 1) {
+      } else if (sscanf(scanbuff, " TARGET_NAME = " S(COMMENTSIZE), target) == 1) {
 	lastwasinote=FALSE; continue;
-      } else if (sscanf(scanbuff," TARGET_BODY = %s", target) == 1) {
-	lastwasinote=FALSE; continue;
-
-      } else if (sscanf(scanbuff," MISSION_PHASE_NAME = %s", mphase) == 1) {
-	lastwasinote=FALSE; continue;
-      } else if (sscanf(scanbuff," MISSION_PHASE = %s", mphase) == 1) {
+      } else if (sscanf(scanbuff, " TARGET_BODY = " S(COMMENTSIZE), target) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_NAME = %s", iname) == 1) {
+      } else if (sscanf(scanbuff, " MISSION_PHASE_NAME = " S(COMMENTSIZE), mphase) == 1) {
+	lastwasinote=FALSE; continue;
+      } else if (sscanf(scanbuff, " MISSION_PHASE = " S(COMMENTSIZE), mphase) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," GAIN_MODE_ID = %s", gainmode) == 1) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_NAME = " S(COMMENTSIZE), iname) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_GAIN_STATE = %s",gainmode)==1) {
+      } else if (sscanf(scanbuff, " GAIN_MODE_ID = " S(COMMENTSIZE), gainmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," EDIT_MODE_ID = %s", editmode) == 1) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_GAIN_STATE = " S(COMMENTSIZE), gainmode) ==1 ) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_EDIT_MODE = %s", editmode)==1) {
+      } else if (sscanf(scanbuff, " EDIT_MODE_ID = " S(COMMENTSIZE), editmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," SCAN_MODE_ID = %s", scanmode) == 1) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_EDIT_MODE = " S(COMMENTSIZE), editmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_SCAN_RATE = %s", scanmode)==1) {
+      } else if (sscanf(scanbuff, " SCAN_MODE_ID = " S(COMMENTSIZE), scanmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," SHUTTER_MODE_ID = %s", shuttermode) == 1) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_SCAN_RATE = " S(COMMENTSIZE), scanmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_SHUTTER_MODE = %s",
-			shuttermode) == 1) {
+      } else if (sscanf(scanbuff, " SHUTTER_MODE_ID = " S(COMMENTSIZE), shuttermode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," SCAN_MODE_ID = %s", scanmode) == 1) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_SHUTTER_MODE = " S(COMMENTSIZE), shuttermode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_SCAN_RATE = %s", scanmode)==1) {
+      } else if (sscanf(scanbuff, " SCAN_MODE_ID = " S(COMMENTSIZE), scanmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," SPACECRAFT_EVENT_TIME = %s", itime) == 1) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_SCAN_RATE = " S(COMMENTSIZE), scanmode) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," IMAGE_TIME = %s", itime) == 1) {
+      } else if (sscanf(scanbuff, " SPACECRAFT_EVENT_TIME = " S(COMMENTSIZE), itime) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," FILTER_NAME = %s", filtname) == 1) {
+      } else if (sscanf(scanbuff, " IMAGE_TIME = " S(COMMENTSIZE), itime) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff," INSTRUMENT_FILTER_NAME = %s",filtname)==1) {
+      } else if (sscanf(scanbuff, " FILTER_NAME = " S(COMMENTSIZE), filtname) == 1) {
 	lastwasinote=FALSE; continue;
 
-      } else if ((sscanf(scanbuff," EXPOSURE_DURATION = %s", exposure) == 1)
-	      || (sscanf(scanbuff," INSTRUMENT_EXPOSURE_DURATION = %s",
-			 exposure) == 1)) {
+      } else if (sscanf(scanbuff, " INSTRUMENT_FILTER_NAME = " S(COMMENTSIZE), filtname) == 1) {
+	lastwasinote=FALSE; continue;
+
+      } else if ((sscanf(scanbuff, " EXPOSURE_DURATION = " S(COMMENTSIZE), exposure) == 1)
+	      || (sscanf(scanbuff, " INSTRUMENT_EXPOSURE_DURATION = " S(COMMENTSIZE),
+			 exposure)) == 1) {
 	tmptmp = (char *) index(scanbuff,'=');
 	tmptmp++;
 	while((*tmptmp) == ' ')
@@ -520,10 +527,10 @@ int LoadPDS(fname, pinfo)
 	strcpy(exposure,tmptmp);
 	lastwasinote=FALSE; continue;
 
-      } else if (sscanf(scanbuff, "NOTE = %s", inote) == 1) {
+      } else if (sscanf(scanbuff, "NOTE = " S(INOTESIZE), inote) == 1) {
 	tmptmp = (char *) index(scanbuff,'='); tmptmp++;
 	while (((*tmptmp) == ' ') || ((*tmptmp)  == '"')) tmptmp++;
-	strcpy(inote,tmptmp);
+	strncpy(inote, tmptmp, INOTESIZE - 1);
 	strcat(inote," ");
 
 	/*   evil and somewhat risky:  A "note" (really, any textual
@@ -548,7 +555,7 @@ int LoadPDS(fname, pinfo)
       } else if (lastwasinote) {
 	tmptmp=scanbuff;
 	while (((*tmptmp) == ' ') || ((*tmptmp)  == '"')) tmptmp++;
-	strcat(inote,tmptmp);
+	strncat(inote, tmptmp, INOTESIZE - strlen(inote) - 1);
 	strcat(inote," ");
 	if (index(tmptmp,'"') != NULL)
 	    lastwasinote=FALSE;
@@ -647,27 +654,27 @@ int LoadPDS(fname, pinfo)
 
   *infobuff='\0';
   if (*spacecraft) {
-    strcat(infobuff,spacecraft);
+    strncat(infobuff, spacecraft, sizeof(infobuff) - 1);
   }
 
   if (*target) {
-    strcat(infobuff,", ");
-    strcat(infobuff,target);
+    strncat(infobuff, ", ", sizeof(infobuff) - strlen(infobuff) - 1);
+    strncat(infobuff, target, sizeof(infobuff) - strlen(infobuff) - 1);
   }
 
   if (*filtname) {
-    strcat(infobuff,", ");
-    strcat(infobuff,filtname);
+    strncat(infobuff, ", ", sizeof(infobuff) - strlen(infobuff) - 1);
+    strncat(infobuff, filtname, sizeof(infobuff) - strlen(infobuff) - 1);
   }
 
   if (*itime) {
-    strcat(infobuff,", ");
-    strcat(infobuff,itime);
+    strncat(infobuff, ", ", sizeof(infobuff) - strlen(infobuff) - 1);
+    strncat(infobuff, itime, sizeof(infobuff) - strlen(infobuff) - 1);
   }
 
-  SetISTR(ISTR_WARNING,infobuff);
+  SetISTR(ISTR_WARNING, "%s", infobuff);
 
-  strcpy(pdsuncompfname,fname);
+  strncpy(pdsuncompfname,fname,sizeof(pdsuncompfname) - 1);
   ftypstr = "";
 
   switch (itype) {
@@ -695,7 +702,7 @@ int LoadPDS(fname, pinfo)
     fclose(zf);
 
 #ifndef VMS
-    sprintf(pdsuncompfname,"%s/xvhuffXXXXXX", tmpdir);
+    snprintf(pdsuncompfname, sizeof(pdsuncompfname) - 1, "%s/xvhuffXXXXXX", tmpdir);
 #else
     strcpy(pdsuncompfname,"sys$disk:[]xvhuffXXXXXX");
 #endif
@@ -704,10 +711,16 @@ int LoadPDS(fname, pinfo)
     close(mkstemp(pdsuncompfname));
 #else
     mktemp(pdsuncompfname);
+    tmpfd = open(pdsuncompfname,O_WRONLY|O_CREAT|O_EXCL,S_IRWUSR);
+    if (tmpfd < 0) {
+      SetISTR(ISTR_WARNING,"Unable to create temporary file.");
+      return 0;
+    }
+    close(tmpfd);
 #endif
 
 #ifndef VMS
-    sprintf(scanbuff,"%s %s - 4 >%s",PDSUNCOMP,fname,pdsuncompfname);
+    sprintf(scanbuff,"%s '%s' - 4 > %s", PDSUNCOMP, fname, pdsuncompfname);
 #else
     sprintf(scanbuff,"%s %s %s 4",PDSUNCOMP,fname,pdsuncompfname);
 #endif
@@ -823,26 +836,26 @@ int LoadPDS(fname, pinfo)
     char tmp[256];
     *(pinfo->comment) = '\0';
 
-    sprintf(tmp, "Spacecraft: %-28sTarget: %-32s\n", spacecraft, target);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Spacecraft: %-28.28sTarget: %-32.32s\n", spacecraft, target);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
 
-    sprintf(tmp, "Filter: %-32sMission phase: %-24s\n", filtname, mphase);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Filter: %-32.32sMission phase: %-24.24s\n", filtname, mphase);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
 
-    sprintf(tmp, "Image time: %-28sGain mode: %-29s\n", itime, gainmode);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Image time: %-28.28sGain mode: %-29.29s\n", itime, gainmode);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
 
-    sprintf(tmp, "Edit mode: %-29sScan mode: %-29s\n", editmode, scanmode);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Edit mode: %-29.29sScan mode: %-29.29s\n", editmode, scanmode);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
 
-    sprintf(tmp, "Exposure: %-30sShutter mode: %-25s\n", exposure,shuttermode);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Exposure: %-30.30sShutter mode: %-25.25s\n", exposure,shuttermode);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
 
-    sprintf(tmp, "Instrument: %-28sImage time: %-28s\n", iname, itime);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Instrument: %-28.28sImage time: %-28.28s\n", iname, itime);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
 
-    sprintf(tmp, "Image Note: %-28s", inote);
-    strcat(pinfo->comment, tmp);
+    sprintf(tmp, "Image Note: %-28.28s", inote);
+    strncat(pinfo->comment, tmp, 2000 - strlen(pinfo->comment) - 1);
   }
 
   if (LoadPDSPalette(fname, pinfo))  return 1;

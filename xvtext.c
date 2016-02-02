@@ -19,9 +19,13 @@
 #include "copyright.h"
 
 #include "xv.h"
+#ifdef TV_MULTILINGUAL
+#include "xvml.h"
+#endif
 
-
-#define BUTTW 80
+#define BUTTW1 80
+#define BUTTW2 60
+#define BUTTW3 110
 #define BUTTH 24
 
 #define TOPMARGIN 30       /* from top of window to top of text window */
@@ -36,10 +40,27 @@
 #define TV_ASCII    0
 #define TV_HEX      1
 #define TV_CLOSE    2
-#define TV_NBUTTS   3
 
+#define TV_E_NBUTTS 3
+
+#ifdef TV_L10N
+#  define TV_RESCAN   3
+#  define TV_USASCII  4
+#  define TV_JIS      5
+#  define TV_EUCJ     6
+#  define TV_MSCODE   7
+
+#  define TV_J_NBUTTS 8
+#endif
 
 #define TITLELEN 128
+
+#ifdef TV_MULTILINGUAL
+struct coding_spec {
+    struct coding_system coding_system;
+    char *(*converter)PARM((char *, int, int *));
+};
+#endif
 
 /* data needed per text window */
 typedef struct {  Window win, textW;
@@ -57,16 +78,89 @@ typedef struct {  Window win, textW;
 		  int    chwide, chhigh;   /* size of textW, in chars */
 		  int    hexmode;          /* true if disp Hex, else Ascii */
 		  SCRL   vscrl, hscrl;
-		  BUTT   but[TV_NBUTTS], nopBut;
+#ifdef TV_L10N
+		  int    code;         /* current character code */
+		  BUTT   but[TV_J_NBUTTS], nopBut;
+#else
+		  BUTT   but[TV_E_NBUTTS], nopBut;
+#endif
+#ifdef TV_MULTILINGUAL
+/*		  int    codeset; */
+		  struct coding_spec ccs;	/* current coding_spec */
+		  BUTT   csbut;
+		  char *cv_text;
+		  int cv_len;
+		  struct context *ctx;
+		  struct ml_text *txt;
+		  struct csinfo_t *cs;
+#endif
 		} TVINFO;
 
 
 static TVINFO   tinfo[MAXTVWIN];
 static int      hasBeenSized = 0;
 static int      haveWindows  = 0;
+static int      nbutts;		/* # of buttons */
 static int      mfwide, mfhigh, mfascent;   /* size of chars in mono font */
 static int     *event_retP, *event_doneP;   /* used in tvChkEvent() */
-
+#ifdef TV_MULTILINGUAL
+# define TV_PLAIN          0
+# define TV_ISO_8859_1     1
+# define TV_ISO_2022_JP    2
+# define TV_EUC_JAPAN      3
+# define TV_ISO_2022_INT_1 4
+# define TV_ISO_2022_KR    5
+# define TV_EUC_KOREA      6
+# define TV_ISO_2022_SS2_8 7
+# define TV_ISO_2022_SS2_7 8
+# define TV_SHIFT_JIS      9
+# define TV_NCSS          10
+static char *codeSetNames[TV_NCSS] = {
+    "plain",
+    "iso-8859-1",
+    "iso-2022-jp",
+    "euc-japan",
+    "iso-2022-int-1",
+    "iso-2022-kr",
+    "euc-korea",
+    "iso-2022-ss2-8",
+    "iso-2022-ss2-7",
+    "Shift JIS",
+};
+static struct coding_spec coding_spec[TV_NCSS] = {
+    /* --- G0 ---   --- G1 ---   --- G2 ---   --- G3 ---  GL GR EOL SF LS */
+    /* plain */
+    {{{{ 1,94,'B'}, { 1,94,'B'}, { 1,94,'B'}, { 1,94,'B'}}, 0, 0,  0, 1, 1},
+     NULL},
+    /* iso-8859-1 */
+    {{{{ 1,94,'B'}, { 1,96,'A'}, {-1,94,'B'}, {-1,94,'B'}}, 0, 1,  0, 0, 0},
+     NULL},
+    /* iso-2022-jp */
+    {{{{ 1,94,'B'}, {-1,94,'B'}, {-1,94,'B'}, {-1,94,'B'}}, 0, 0,  0, 1, 0},
+     NULL},
+    /* euc-japan */
+    {{{{ 1,94,'B'}, { 2,94,'B'}, { 1,94,'J'}, { 2,94,'D'}}, 0, 1,  0, 1, 0},
+     NULL},
+    /* iso-2022-int-1 */
+    {{{{ 1,94,'B'}, { 2,94,'C'}, {-1,94,'B'}, {-1,94,'B'}}, 0, 1,  0, 1, 1},
+     NULL},
+    /* iso-2022-kr */
+    {{{{ 1,94,'B'}, { 2,94,'C'}, {-1,94,'B'}, {-1,94,'B'}}, 0, 1,  0, 0, 1},
+     NULL},
+    /* euc-korea */
+    {{{{ 1,94,'B'}, { 2,94,'C'}, {-1,94,'B'}, {-1,94,'B'}}, 0, 1,  0, 0, 0},
+     NULL},
+    /* iso-2022-ss2-8 */
+    {{{{ 1,94,'B'}, {-1,94,'C'}, { 0,94,'B'}, {-1,94,'B'}}, 0, 1,  0, 0, 0},
+     NULL},
+    /* iso-2022-ss2-7 */
+    {{{{ 1,94,'B'}, {-1,94,'C'}, { 0,94,'B'}, {-1,94,'B'}}, 0, 1,  0, 1, 0},
+     NULL},
+    /* shift jis */
+    {{{{ 1,94,'B'}, { 2,94,'B'}, { 1,94,'J'}, { 2,94,'D'}}, 0, 1,  1, 1, 0},
+     sjis_to_jis},
+};
+#endif
 
 static void closeText       PARM((TVINFO *));
 static int  tvChkEvent      PARM((TVINFO *, XEvent *));
@@ -82,7 +176,15 @@ static void keyText         PARM((TVINFO *, XKeyEvent *));
 static void textKey         PARM((TVINFO *, int));
 static void doHexAsciiCmd   PARM((TVINFO *, int));
 static void computeText     PARM((TVINFO *));
-
+#ifdef TV_L10N
+static int  selectCodeset         PARM((TVINFO *));
+#endif
+#ifdef TV_MULTILINGUAL
+static void setCodingSpec   PARM((TVINFO *, struct coding_spec *));
+static void createCsWins    PARM((char *));
+static void openCsWin       PARM((TVINFO *));
+static void closeCsWin      PARM((TVINFO *));
+#endif
 
 /* HEXMODE output looks like this:
 0x00000000: 00 11 22 33 44 55 66 77 - 88 99 aa bb cc dd ee ff  0123456789abcdef
@@ -98,12 +200,51 @@ void CreateTextWins(geom, cmtgeom)
   XSizeHints            hints;
   XSetWindowAttributes  xswa;
   TVINFO               *tv;
+#ifdef TV_MULTILINGUAL
+  int			default_codeset;
+#endif
 
+#ifdef TV_L10N
+  if (!xlocale) {
+#endif
+      mfwide = monofinfo->max_bounds.width;
+      mfhigh = monofinfo->ascent + monofinfo->descent;
+      mfascent = monofinfo->ascent;
 
-  mfwide = monofinfo->max_bounds.width;
-  mfhigh = monofinfo->ascent + monofinfo->descent;
-  mfascent = monofinfo->ascent;
+      nbutts = TV_E_NBUTTS;	/* # of buttons */
+#ifdef TV_L10N
+  }
+  else {
+      mfwide = monofsetinfo->max_logical_extent.width / 2;	/* shit! */
+      mfhigh = monofsetinfo->max_logical_extent.height + 1;
+      mfascent = mfhigh;
 
+      nbutts = TV_J_NBUTTS;	/* # of buttons */
+  }
+#endif
+
+#ifdef TV_MULTILINGUAL
+  {
+    char *dc = XGetDefault(theDisp, "xv", "codeSet");
+    if (dc == NULL)
+      default_codeset = TV_DEFAULT_CODESET;
+    else {
+      for (i = 0; i < TV_NCSS; i++) {
+	if (strcmp(dc, codeSetNames[i]) == 0)
+	  break;
+      }
+      if (i >= TV_NCSS) {
+        if (strcmp(dc, "iso-2022") == 0)
+	  default_codeset = TV_PLAIN;
+	else {
+	  SetISTR(ISTR_WARNING, "%s: unknown codeset.", dc);
+	  default_codeset = TV_PLAIN;
+	}
+      } else
+	default_codeset = i;
+    }
+  }
+#endif
   /* compute default size of textview windows.  should be big enough to
      hold an 80x24 text window */
 
@@ -117,6 +258,14 @@ void CreateTextWins(geom, cmtgeom)
 
   for (i=0; i<MAXTVWIN; i++) {
     tv = &tinfo[i];
+
+#ifdef TV_MULTILINGUAL
+    tv->ctx = ml_create_context(ScreenOfDisplay(theDisp, theScreen));
+    tv->txt = NULL;
+    tv->cv_text = NULL;
+    tv->cv_len = 0;
+    ml_set_charsets(tv->ctx, &coding_spec[TV_PLAIN].coding_system);
+#endif
 
     tv->win = CreateWindow((i<CMTWIN) ? "xv text viewer" : "xv image comments",
 			   "XVtextview",
@@ -162,12 +311,27 @@ void CreateTextWins(geom, cmtgeom)
     XSelectInput(theDisp, tv->textW, ExposureMask | ButtonPressMask);
 
 
-    BTCreate(&(tv->but[TV_ASCII]), tv->win, 0,0,BUTTW,BUTTH,
+    BTCreate(&(tv->but[TV_ASCII]), tv->win, 0,0,BUTTW1,BUTTH,
 	     "Ascii",infofg,infobg,hicol,locol);
-    BTCreate(&(tv->but[TV_HEX]), tv->win, 0,0,BUTTW,BUTTH,
+    BTCreate(&(tv->but[TV_HEX]), tv->win, 0,0,BUTTW1,BUTTH,
 	     "Hex",infofg,infobg,hicol,locol);
-    BTCreate(&(tv->but[TV_CLOSE]), tv->win, 0,0,BUTTW,BUTTH,
+    BTCreate(&(tv->but[TV_CLOSE]), tv->win, 0,0,BUTTW1,BUTTH,
 	     "Close",infofg,infobg,hicol,locol);
+
+#ifdef TV_L10N
+    if (xlocale) {
+	BTCreate(&(tv->but[TV_RESCAN]), tv->win, 0,0,BUTTW2,BUTTH,
+		 "RESCAN",infofg,infobg,hicol,locol);
+	BTCreate(&(tv->but[TV_USASCII]), tv->win, 0,0,BUTTW2,BUTTH,
+		 "ASCII",infofg,infobg,hicol,locol);
+	BTCreate(&(tv->but[TV_JIS]), tv->win, 0,0,BUTTW2,BUTTH,
+		 "JIS",infofg,infobg,hicol,locol);
+	BTCreate(&(tv->but[TV_EUCJ]), tv->win, 0,0,BUTTW2,BUTTH,
+		 "EUC-j",infofg,infobg,hicol,locol);
+	BTCreate(&(tv->but[TV_MSCODE]), tv->win, 0,0,BUTTW2,BUTTH,
+		 "MS Kanji",infofg,infobg,hicol,locol);
+    }
+#endif
 
     BTCreate(&(tv->nopBut), tv->win, 0,0, (u_int) tv->vscrl.tsize+1,
 	     (u_int) tv->vscrl.tsize+1, "", infofg, infobg, hicol, locol);
@@ -175,11 +339,28 @@ void CreateTextWins(geom, cmtgeom)
 
     XMapSubwindows(theDisp, tv->win);
 
+#ifdef TV_MULTILINGUAL
+    BTCreate(&tv->csbut, tv->win, 0, 0, BUTTW1, BUTTH, "Code Sets",
+	     infofg, infobg, hicol, locol);
+#endif
+
     tv->text = (char *) NULL;
     tv->textlen = 0;
     tv->title[0] = '\0';
+#ifdef TV_L10N
+    tv->code = (xlocale ? LOCALE_DEFAULT : 0);
+#endif
+#ifdef TV_MULTILINGUAL
+    tv->ccs = coding_spec[default_codeset];
+#endif
   }
-
+#ifdef TV_MULTILINGUAL
+  get_monofont_size(&mfwide, &mfhigh);
+  /* recalculate sizes. */
+  defwide = 80 * mfwide + 2*LRMARGINS + 8 + 20;   /* -ish */
+  defhigh = 24 * mfhigh + TOPMARGIN + BOTMARGIN + 8 + 20;   /* ish */
+  cmthigh = 6  * mfhigh + TOPMARGIN + BOTMARGIN + 8 + 20;   /* ish */
+#endif
 
   for (i=0; i<MAXTVWIN; i++) {
     resizeText(&tinfo[i], defwide, (i<CMTWIN) ? defhigh : cmthigh);
@@ -190,44 +371,54 @@ void CreateTextWins(geom, cmtgeom)
 
   hasBeenSized = 1;  /* we can now start looking at textview events */
 
+#ifdef TV_MULTILINGUAL
+  createCsWins("+100+100");
+#endif
 }
 
 
 /***************************************************************/
-void TextView(fname)
+int TextView(fname)
      char *fname;
 {
   /* given a filename, attempts to read in the file and open a textview win */
 
+  int   filetype;
   long  textlen;
   char *text, buf[512], title[128], rfname[MAXPATHLEN+1];
   char *basefname[128];  /* just current fname, no path */
   FILE *fp;
+  char filename[MAXPATHLEN+1];
+
+  strncpy(filename, fname, sizeof(filename) - 1);
+#ifdef AUTO_EXPAND
+  Mkvdir(filename);
+  Dirtovd(filename);
+#endif
 
   basefname[0] = '\0';
-  strcpy(rfname, fname);
+  strncpy(rfname, filename, sizeof(rfname) - 1);
 
   /* see if this file is compressed.  if it is, uncompress it, and view
      the uncompressed version */
 
-  if (ReadFileType(fname) == RFT_COMPRESS) {
+  filetype = ReadFileType(filename);
+  if ((filetype == RFT_COMPRESS) || (filetype == RFT_BZIP2)) {
 #ifndef VMS
-    if (!UncompressFile(fname, rfname)) return;    /* failed to uncompress */
+    if (!UncompressFile(filename, rfname, filetype)) return FALSE;
 #else
     /* chop off trailing '.Z' from friendly displayed basefname, if any */
-    strcpy (basefname, fname);
+    strncpy (basefname, filename, 128 - 1);
     *rindex (basefname, '.') = '\0';
-    if (!UncompressFile(basefname, rfname)) return;/* failed to uncompress */
+    if (!UncompressFile(basefname, rfname, filetype)) return FALSE;
 #endif
   }
-
-
 
   fp = fopen(rfname, "r");
   if (!fp) {
     sprintf(buf,"Couldn't open '%s':  %s", rfname, ERRSTR(errno));
     ErrPopUp(buf,"\nOh well");
-    return;
+    return FALSE;
   }
 
 
@@ -239,16 +430,16 @@ void TextView(fname)
     sprintf(buf, "File '%s' contains no data.  (Zero length file.)", rfname);
     ErrPopUp(buf, "\nOk");
     fclose(fp);
-    return;
+    return FALSE;
   }
 
-  text = (char *) malloc((size_t) textlen);
+  text = (char *) malloc((size_t) textlen + 1);
   if (!text) {
     sprintf(buf, "Couldn't malloc %ld bytes to read file '%s'",
 	    textlen, rfname);
     ErrPopUp(buf, "\nSo what!");
     fclose(fp);
-    return;
+    return FALSE;
   }
 
   if (fread(text, (size_t) 1, (size_t) textlen, fp) != textlen) {
@@ -256,6 +447,9 @@ void TextView(fname)
 	    rfname);
     ErrPopUp(buf, "\nHmm...");
   }
+#ifdef TV_MULTILINGUAL
+  text[textlen] = '\0';
+#endif
 
   fclose(fp);
 
@@ -263,6 +457,7 @@ void TextView(fname)
   OpenTextView(text, (int) textlen, title, 1);
 
   /* note:  text gets freed when window gets closed */
+  return TRUE;
 }
 
 
@@ -504,6 +699,10 @@ static void closeText(tv)
   tv->text  = (char *) NULL;
   tv->lines = (char **) NULL;
   tv->numlines = tv->textlen = tv->hexmode = 0;
+
+#ifdef TV_MULTILINGUAL
+  closeCsWin(tv);
+#endif
 }
 
 
@@ -591,6 +790,40 @@ static int tvChkEvent(tv, xev)
       else if (e->window == tv->textW) { }
       else rv = 0;
     }
+    else if (e->button == Button4) {   /* note min vs. max, + vs. - */
+      /* scroll regardless of where we are in the text window */
+      if (e->window == tv->win ||
+	 e->window == tv->vscrl.win ||
+	 e->window == tv->hscrl.win ||
+	 e->window == tv->textW)
+      {
+	SCRL *sp=&(tv->vscrl);
+	int  halfpage=sp->page/2;
+
+	if (sp->val > sp->min+halfpage)
+	  SCSetVal(sp,sp->val-halfpage);
+	else
+	  SCSetVal(sp,sp->min);
+      }
+      else rv = 0;
+    }
+    else if (e->button == Button5) {   /* note max vs. min, - vs. + */
+      /* scroll regardless of where we are in the text window */
+      if (e->window == tv->win ||
+	 e->window == tv->vscrl.win ||
+	 e->window == tv->hscrl.win ||
+	 e->window == tv->textW)
+      {
+	SCRL *sp=&(tv->vscrl);
+	int  halfpage=sp->page/2;
+
+	if (sp->val < sp->max-halfpage)
+	  SCSetVal(sp,sp->val+halfpage);
+	else
+	  SCSetVal(sp,sp->max);
+      }
+      else rv = 0;
+    }
     else rv = 0;
   }
 
@@ -633,7 +866,9 @@ static void resizeText(tv,w,h)
   int        i, maxw, maxh;
   XSizeHints hints;
 
+#ifndef TV_MULTILINGUAL
   if (tv->wide == w && tv->high == h) return;  /* no change in size */
+#endif
 
   if (XGetNormalHints(theDisp, tv->win, &hints)) {
     hints.width  = w;
@@ -657,10 +892,23 @@ static void resizeText(tv,w,h)
   XMoveResizeWindow(theDisp, tv->textW, LRMARGINS, TOPMARGIN,
 		    (u_int) tv->twWide, (u_int) tv->twHigh);
 
-  for (i=0; i<TV_NBUTTS; i++) {
-    tv->but[i].x = tv->wide - (TV_NBUTTS-i) * (BUTTW+5);
+  for (i=0; i<TV_E_NBUTTS; i++) {
+    tv->but[i].x = tv->wide - (TV_E_NBUTTS-i) * (BUTTW1+5);
     tv->but[i].y = tv->high - BUTTH - 5;
   }
+#ifdef TV_MULTILINGUAL
+  tv->csbut.x = 5;
+  tv->csbut.y = tv->high - BUTTH - 5;
+#endif
+
+#ifdef TV_L10N
+  if (xlocale) {
+    for (; i<TV_J_NBUTTS; i++) {
+      tv->but[i].x = 5 + (i-TV_E_NBUTTS) * (BUTTW2+5);
+      tv->but[i].y = tv->high - BUTTH - 5;
+    }
+  }
+#endif
 
   computeScrlVals(tv);
 
@@ -711,6 +959,29 @@ static void doCmd(tv, cmd)
   case TV_CLOSE:   if (tv == &tinfo[CMTWIN]) CloseCommentText();
                    else closeText(tv);
                    break;
+
+#ifdef TV_L10N
+  case TV_RESCAN:
+    tv->code = selectCodeset(tv);
+    drawTextW(0, &tv->vscrl);
+    break;
+  case TV_USASCII:
+    tv->code = LOCALE_USASCII;
+    drawTextW(0, &tv->vscrl);
+    break;
+  case TV_JIS:
+    tv->code = LOCALE_JIS;
+    drawTextW(0, &tv->vscrl);
+    break;
+  case TV_EUCJ:
+    tv->code = LOCALE_EUCJ;
+    drawTextW(0, &tv->vscrl);
+    break;
+  case TV_MSCODE:
+    tv->code = LOCALE_MSCODE;
+    drawTextW(0, &tv->vscrl);
+    break;
+#endif	/* TV_L10N */
   }
 }
 
@@ -745,8 +1016,10 @@ static void drawTextView(tv)
   drawNumLines(tv);
 
   /* draw the buttons */
-  for (i=0; i<TV_NBUTTS; i++) BTRedraw(&(tv->but[i]));
-
+  for (i=0; i<nbutts; i++) BTRedraw(&(tv->but[i]));
+#ifdef TV_MULTILINGUAL
+  BTRedraw(&tv->csbut);
+#endif
   BTRedraw(&tv->nopBut);
 }
 
@@ -816,7 +1089,14 @@ static void drawTextW(delta, sptr)
      int   delta;
      SCRL *sptr;
 {
-  int     i, j, lnum, hpos, cpos, extrach, lwide;
+  int     i, j, lnum, hpos, vpos, cpos, lwide;
+#ifndef TV_MULTILINGUAL
+  int     extrach;
+#endif
+#ifdef TV_L10N
+  int     desig_stat;	/* for ISO 2022-JP */
+	      /* 0: ASCII,  1: JIS X 0208,  2: GL is JIS X 0201 kana */
+#endif
   TVINFO *tv;
   char    linestr[512];
   u_char  *sp, *ep, *lp;
@@ -839,12 +1119,38 @@ static void drawTextW(delta, sptr)
   XSetFont(theDisp, theGC, monofont);
 
   hpos = tv->hscrl.val;
+  vpos = tv->vscrl.val;
   lwide = (tv->chwide < 500) ? tv->chwide : 500;
 
   /* draw text */
   if (!tv->hexmode) {     /* ASCII mode */
+#ifdef TV_MULTILINGUAL
+    XClearArea(theDisp, tv->textW, 0, 0,
+	       (u_int) tv->twWide, (u_int) tv->twHigh, False);
+    if(tv->txt == NULL)
+      return;
+    else {
+	int i;
+	int y;
+	struct ml_text *tp = tv->txt;
+	struct ml_line *lp;
+
+	XSetFunction(theDisp, theGC, GXcopy);
+	XSetClipMask(theDisp, theGC, None);
+	y = 3;
+	for (lp = &tp->lines[vpos], i = tp->nlines - vpos;
+		i > 0; lp++, i--) {
+	    XDrawText16(theDisp, tv->textW, theGC,
+			-mfwide * hpos + 3, y + lp->ascent,
+			lp->items, lp->nitems);
+	    y += lp->ascent + lp->descent;
+	    if (y > tv->twHigh)
+		break;
+	}
+    }
+#else
     for (i=0; i<tv->chhigh; i++) {    /* draw each line */
-      lnum = i + tv->vscrl.val;
+      lnum = i + vpos;
       if (lnum < tv->numlines-1) {
 
 	/* find start of displayed portion of line.  This is *wildly*
@@ -865,7 +1171,13 @@ static void drawTextW(delta, sptr)
 	      cpos--;  sp++;
 	    }
 	    else if (*sp < 32) extrach = 1;
+
+#ifdef TV_L10N
+	    else if (!tv->code && *sp > 127) extrach = 3;
+#else
 	    else if (*sp > 127) extrach = 3;
+#endif
+
 	    else sp++;
 	  }
 	  else {
@@ -881,6 +1193,10 @@ static void drawTextW(delta, sptr)
 
 	/* build up the linestr buffer, which is the current line, padded
 	   with blanks to a width of exactly tv->chwide chars */
+#ifdef TV_L10N
+	desig_stat = 0;		/* for ISO 2022-JP */
+	      /* 0: ASCII,  1: JIS X 0208,  2: GL is JIS X 0201 kana */
+#endif
 	for (cpos=0, lp=(byte *) linestr; cpos<lwide; cpos++, lp++) {
 	  if (sp>=ep) *lp = ' ';
 	  else {
@@ -894,13 +1210,117 @@ static void drawTextW(delta, sptr)
 	      cpos--;  lp--;  sp++;
 	    }
 
+#ifdef TV_L10N
+	    else if (*sp < 32 && !(tv->code == LOCALE_JIS && *sp == 0x1b)) {
+#else
 	    else if (*sp < 32) {
+#endif
 	      if (!extrach) extrach = 2;
 	      if      (extrach == 2) *lp = '^';
 	      else if (extrach == 1) *lp = *sp + 64;
 	    }
 
+#ifdef TV_L10N
+	    /* convert to EUC-Japan */
+	    else if (tv->code == LOCALE_JIS) {
+	      if (*sp == 0x1b) {	/* ESC */
+		if (*(sp+1) == '$') {
+		  if (*(sp+2) == 'B' || *(sp+2) == 'A' || *(sp+2) == '@') {
+		    /* ESC $ B,  ESC $ A,  ESC $ @ */
+		    desig_stat = 1;
+		    sp += 3;  cpos--;  lp--;
+		  }
+		  else if (*(sp+2) == '(' && *(sp+3) == 'B') {
+		    /* ESC $ ( B */
+		    desig_stat = 1;
+		    sp += 4;  cpos--;  lp--;
+		  }
+		}
+		else if (*(sp+1) == '(') {
+		  if (*(sp+2) == 'B' || *(sp+2) == 'J' || *(sp+2) == 'H') {
+		    /* ESC ( B,  ESC ( J,  ESC ( H */
+		    desig_stat = 0;
+		    sp += 3;  cpos--;  lp--;
+		  }
+		  else if (*(sp+2) == 'I') {
+		    /* ESC ( I */
+		    desig_stat = 2;
+		    sp += 3;  cpos--;  lp--;
+		  }
+		}
+		else if (*(sp+1) == ')' && *(sp+2) == 'I') {
+		  /* ESC ) I */
+		  desig_stat = 2;
+		  sp += 3;  cpos--;  lp--;
+		}
+		else {	/* error */
+		  *lp = ' ';  sp++;
+		}
+	      }
+
+	      else {
+		switch (desig_stat) {
+		case 0:		/* ASCII */
+		  *lp = *sp++;
+		  break;
+		case 1:		/* JIS X 0208 */
+		  *lp++ = *sp++ | 0x80;
+		  *lp   = *sp++ | 0x80;
+		  cpos++;
+		  break;
+		case 2:		/* JIS X 0201 kana */
+#if defined(__osf__) && !defined(X_LOCALE)
+		  *lp   = '=';  sp++;
+#else
+		  *lp++ = 0x8e;	/* ^N | 0x80 */
+		  *lp   = *sp++ | 0x80;
+#endif
+		  break;
+		default:	/* error */
+		  *lp = *sp++;
+		  break;
+		}
+	      }
+	    }
+
+	    else if (tv->code == LOCALE_MSCODE) {
+	      if ((*sp >= 0x81 && *sp <= 0x9f)
+			 || (*sp >= 0xe0 && *sp <= 0xef)) {
+		static u_char c1, c2;
+
+/*fprintf(stderr, "(%x,%x)->", *sp, *(sp+1));*/
+		c1 = ((*sp - ((*sp>=0xe0) ? 0xb0 : 0x70)) << 1)
+			- ((*(sp+1)<=0x9e) ? 1 : 0);
+		c2 = *(sp+1);
+		if      (c2 >= 0x9f)  c2 -= 0x7e;	/* 0x9F - 0xFC */
+		else if (c2 >= 0x80)  c2 -= 0x20;	/* 0x80 - 0x9E */
+		else		      c2 -= 0x1f;	/* 0x40 - 0x7E */
+
+		*lp++ = c1 | 0x80;
+		*lp   = c2 | 0x80;
+		sp += 2;
+/*fprintf(stderr, "(%x %x) ", c1 | 0x80, c2 | 0x80);*/
+		cpos++;
+	      }
+
+	      else if (*sp >= 0xa1 && *sp <= 0xdf) {	/* JIS X 0201 kana */
+#if defined(__osf__) && !defined(X_LOCALE)
+		*lp   = '=';  sp++;
+#else
+		*lp++ = 0x8e;	/* ^N | 0x80 */
+		*lp   = *sp++;
+#endif
+	      }
+
+	      else *lp = *sp++;
+	    }
+#endif	/* TV_L10N */
+
+#ifdef TV_L10N
+	    else if (!tv->code && *sp > 127) {
+#else
 	    else if (*sp > 127) {
+#endif
 	      if (!extrach) extrach = 4;
 	      if      (extrach == 4) *lp = '\\';
 	      else if (extrach == 3) *lp = ((u_char)(*sp & 0700) >> 6) + '0';
@@ -916,6 +1336,9 @@ static void drawTextW(delta, sptr)
 	    }
 	  }
 	}
+#ifdef TV_L10N
+	*lp = '\0';	/* terminate linestr */
+#endif
       }
 
       else {  /* below bottom of file.  Just build a blank str */
@@ -923,15 +1346,22 @@ static void drawTextW(delta, sptr)
       }
 
       /* draw the line */
-      XDrawImageString(theDisp, tv->textW, theGC,
-		       3, i*mfhigh + 3 + mfascent, linestr, lwide);
+#ifdef TV_L10N
+      if (xlocale)
+	XmbDrawImageString(theDisp, tv->textW, monofset, theGC,
+		3, i*mfhigh + 1 + mfascent, linestr, strlen(linestr));
+      else
+#endif
+	XDrawImageString(theDisp, tv->textW, theGC,
+		3, i*mfhigh + 3 + mfascent, linestr, lwide);
     }  /* for i ... */
+#endif /* TV_MULTILINGUAL */
   }  /* if hexmode */
 
 
   else { /* HEX MODE */
     for (i=0; i<tv->chhigh; i++) {    /* draw each line */
-      lnum = i + tv->vscrl.val;
+      lnum = i + vpos;
       if (lnum < tv->hexlines) {
 
 	char hexstr[80], tmpstr[16];
@@ -957,7 +1387,11 @@ static void drawTextW(delta, sptr)
 
 	for (j=0; j<16; j++) {
 	  if (sp+j < ep) {
+#ifdef TV_L10N
+	    if (sp[j] >= 32 && (sp[j] <= 127 || tv->code)) *lp++ = sp[j];
+#else
 	    if (sp[j] >= 32 && sp[j] <= 127) *lp++ = sp[j];
+#endif
 	    else *lp++ = '.';
 	  }
 	  else *lp++ = ' ';
@@ -1005,14 +1439,21 @@ static void clickText(tv, x,y)
   int   i;
   BUTT *bp;
 
-  for (i=0, bp=tv->but; i<TV_NBUTTS; i++, bp++) {
+  for (i=0, bp=tv->but; i<nbutts; i++, bp++) {
     if (PTINRECT(x,y,bp->x,bp->y,bp->w,bp->h)) break;
   }
 
-  if (i<TV_NBUTTS) {
+  if (i<nbutts) {
     if (BTTrack(bp)) doCmd(tv, i);
     return;
   }
+
+#ifdef TV_MULTILINGUAL
+  if (PTINRECT(x, y, tv->csbut.x, tv->csbut.y, tv->csbut.w, tv->csbut.h)) {
+    if (BTTrack(&tv->csbut))
+      openCsWin(tv);
+  }
+#endif
 }
 
 
@@ -1042,13 +1483,38 @@ static void keyText(tv, kevt)
 
   /* keyboard equivalents */
   switch (buf[0]) {
-  case '\001': doCmd(tv, TV_ASCII);   break;      /* ^A = Ascii */
-  case '\010': doCmd(tv, TV_HEX);     break;      /* ^H = Hex   */
+  case '\001':  case 'a':  case 'A':
+    doCmd(tv, TV_ASCII);   break;      /* ^A = Ascii */
+  case '\010':  case 'h':  case 'H':
+    doCmd(tv, TV_HEX);     break;      /* ^H = Hex   */
 
-  case '\033': doCmd(tv, TV_CLOSE);   break;      /* ESC = Close window */
+  case '\021':  case 'q':  case 'Q':
+  case '\003':  case 'c':  case 'C':
+  case '\033':
+    doCmd(tv, TV_CLOSE);   break;      /* ESC = Close window */
 
   default:     break;
   }
+
+#ifdef TV_L10N
+  if (xlocale) {
+    switch (buf[0]) {
+    case '\022':  case 'r':  case 'R':
+      doCmd(tv, TV_RESCAN);   break;
+    case '\012':  case 'j':  case 'J':
+      doCmd(tv, TV_JIS);      break;
+    case '\005':  case 'e':  case 'E':
+    case '\025':  case 'u':  case 'U':
+      doCmd(tv, TV_EUCJ);     break;
+    case '\015':  case 'm':  case 'M':
+    case '\023':  case 's':  case 'S':
+      doCmd(tv, TV_MSCODE);  break;
+
+    default:  break;
+    }
+  }
+#endif	/* TV_L10N */
+
 }
 
 
@@ -1109,7 +1575,20 @@ static void doHexAsciiCmd(tv, hexval)
     if (i<tv->numlines-1) SCSetVal(&tv->vscrl, i);
   }
 
+#ifdef TV_L10N
+  /* redraw text */
+  if (xlocale) {
+    XClearArea(theDisp, tv->textW, 0, 0,
+	       (u_int) tv->twWide, (u_int) tv->twHigh, False);
+
+    drawTextW(0, &tv->vscrl);
+  }
+#endif
+#ifdef TV_MULTILINGUAL
+  XClearArea(theDisp, tv->textW, 0, 0,
+	     (u_int) tv->twWide, (u_int) tv->twHigh, False);
   drawTextW(0, &tv->vscrl);
+#endif
 }
 
 
@@ -1122,9 +1601,22 @@ static void computeText(tv)
   int   i,j,wide,maxwide,space;
   byte *sp;
 
+#ifdef TV_L10N
+  /* select code-set */
+  if (xlocale)
+    tv->code = selectCodeset(tv);
+#endif	/* TV_L10N */
+
   if (!tv->text) {
     tv->numlines = tv->hexlines = 0;
     tv->lines = (char **) NULL;
+#ifdef TV_MULTILINGUAL
+    if (tv->cv_text != NULL) {
+	free(tv->cv_text);
+	tv->cv_text = NULL;
+    }
+    tv->txt = NULL;
+#endif
     return;
   }
 
@@ -1172,15 +1664,127 @@ static void computeText(tv)
 	wide += space;
       }
       else if (*sp <  32) wide += 2;
+#ifdef TV_L10N
+      else if (*sp > 127 && !tv->code) wide += 4;
+#else
       else if (*sp > 127) wide += 4;
+#endif
       else wide++;
     }
     if (wide > maxwide) maxwide = wide;
   }
   tv->maxwide = maxwide;
 
+#ifdef TV_MULTILINGUAL
+  ml_set_charsets(tv->ctx, &tv->ccs.coding_system);
+  if (tv->cv_text != NULL) {
+      free(tv->cv_text);
+      tv->cv_text = NULL;
+  }
+  if (tv->ccs.converter == NULL) {
+      tv->txt = ml_draw_text(tv->ctx, tv->text, tv->textlen);
+  } else {
+      tv->cv_text = (*tv->ccs.converter)(tv->text, tv->textlen, &tv->cv_len);
+      tv->txt = ml_draw_text(tv->ctx, tv->cv_text, tv->cv_len);
+  }
+  tv->maxwide = tv->txt->width / mfwide;
+  tv->numlines = tv->txt->height / mfhigh + 1;
+#endif
+
   tv->hexlines = (tv->textlen + 15) / 16;
 }
+
+
+/***************************************************/
+#ifdef TV_L10N
+static int selectCodeset(tv)
+     TVINFO *tv;
+{
+  u_char *sp;
+  int i, len;
+  int code = LOCALE_USASCII;	/* == 0 */
+
+
+  len = tv->textlen;
+
+  /* select code-set */
+  if (xlocale) {
+    sp = (u_char *) tv->text;  i = 0;
+    while (i < len - 1) {
+      if (*sp == 0x1b &&
+	  (*(sp+1) == '$' || *(sp+1) == '(' || *(sp+1) == ')')) {
+	code = LOCALE_JIS;
+	break;
+      }
+
+      else if (*sp >= 0xa1 && *sp <= 0xdf) {
+	if (*(sp+1) >= 0xf0 && *(sp+1) <= 0xfe) {
+	  code = LOCALE_EUCJ;
+	  break;
+	}
+#  if (LOCALE_DEFAULT == LOCALE_EUCJ)
+	else {
+	  sp++;  i++;
+	}
+#  endif
+      }
+
+      else if ((*sp >= 0x81 && *sp <= 0x9f) || (*sp >= 0xe0 && *sp <= 0xef)) {
+	if ((*(sp+1) >= 0x40 && *(sp+1) <= 0x7e) || *(sp+1) == 0x80) {
+	  code = LOCALE_MSCODE;
+	  break;
+	}
+	else if (*(sp+1) == 0xfd || *(sp+1) == 0xfe) {
+	  code = LOCALE_EUCJ;
+	  break;
+	}
+	else {
+	  sp++;  i++;
+	}
+      }
+
+      else if (*sp >= 0xf0 && *sp <= 0xfe) {
+	code = LOCALE_EUCJ;
+	break;
+      }
+
+      sp++;  i++;
+    }
+    if (!code)  code = LOCALE_DEFAULT;
+  }
+
+  return code;
+}
+#endif	/* TV_L10N */
+
+#ifdef TV_MULTILINGUAL
+static void setCodingSpec(tv, cs)
+    TVINFO *tv;
+    struct coding_spec *cs;
+{
+  if (xvbcmp((char *) &tv->ccs, (char *) cs, sizeof *cs) == 0)
+    return;
+
+  tv->ccs = *cs;
+#if 0
+  ml_set_charsets(tv->ctx, &tv->ccs.coding_system);
+  if (tv->cv_text != NULL) {
+      free(tv->cv_text);
+      tv->cv_text = NULL;
+  }
+  if (tv->ccs.converter == NULL) {
+      tv->txt = ml_draw_text(tv->ctx, tv->text, tv->textlen);
+  } else {
+      tv->cv_text = (*tv->ccs.converter)(tv->text, tv->textlen, &tv->cv_len);
+      tv->txt = ml_draw_text(tv->ctx, tv->cv_text, tv->cv_len);
+  }
+#else
+  computeText(tv);
+  computeScrlVals(tv);
+#endif
+  /* drawTextW(0, &tv->vscrl); */
+}
+#endif
 
 
 /**********************************************************************/
@@ -1555,8 +2159,509 @@ void ShowKeyHelp()
   OpenTextView(keyhelp, (int) strlen(keyhelp), "XV Help", 0);
 }
 
+#ifdef TV_MULTILINGUAL
 
+#define TV_ML_ACCEPT TV_NCSS
+#define TV_ML_CLOSE  (TV_ML_ACCEPT + 1)
+#define TV_ML_NBUTTS (TV_ML_CLOSE + 1)
 
+#define TV_ML_RETCODE	0
+#	define TV_ML_RET_LF	0
+#	define TV_ML_RET_CRLF	1
+#	define TV_ML_RET_CR	2
+#	define TV_ML_RET_ANY	3
+#define TV_ML_GL	1
+#define TV_ML_GR	2
+#define TV_ML_CVTR	3
+#define TV_ML_NRBUTTS	4
 
+#define TV_ML_SHORT	0
+#define TV_ML_LOCK	1
+#define TV_ML_NCBUTTS	2
 
+#define TV_ML_NLISTS	4
 
+#define CSWIDE (BUTTW3 * 5 + 5 * 6)
+#define CSHIGH 450
+
+typedef struct csinfo_t {
+    TVINFO *tv;
+    RBUTT *rbt[TV_ML_NRBUTTS];
+    CBUTT cbt[TV_ML_NCBUTTS];
+    LIST ls[TV_ML_NLISTS];
+    BUTT bt[TV_ML_NBUTTS];
+    int up;
+    Window win;
+    struct coding_spec tcs;	/* temporary coding_spec */
+} CSINFO;
+CSINFO csinfo[MAXTVWIN];
+static char **regs;
+static int nregs;
+
+static int  csCheckEvent           PARM((CSINFO *, XEvent *));
+static void csReflect              PARM((CSINFO *));
+static void csRedraw               PARM((CSINFO *));
+static void csListRedraw           PARM((LIST *));
+static void csLsRedraw             PARM((int, SCRL *));
+static void create_registry_list   PARM((void));
+
+static char *(*cvtrtab[])PARM((char *, int, int *)) = {
+    NULL,
+    sjis_to_jis,
+};
+
+static void createCsWins(geom)
+    char *geom;
+{
+    XSetWindowAttributes xswa;
+    int i, j;
+
+    create_registry_list();
+
+    xswa.backing_store = WhenMapped;
+    for (i = 0; i < MAXTVWIN; i++) {
+	char nam[8];
+	TVINFO *tv = &tinfo[i];
+	CSINFO *cs = &csinfo[i];
+	tv->cs = cs;
+	cs->tv = tv;
+	sprintf(nam, "XVcs%d", i);
+	cs->win = CreateWindow("xv codeset", nam, geom,
+			       CSWIDE, CSHIGH, infofg, infobg, 0);
+	if (!cs->win) FatalError("couldn't create 'charset' window!");
+#ifdef BACKING_STORE
+	XChangeWindowAttributes(theDisp, cs->win, CWBackingStore, &xswa);
+#endif
+	XSelectInput(theDisp, cs->win, ExposureMask | ButtonPressMask);
+
+	DrawString(cs->win, 5, 5 + ASCENT, "Initial States");
+	for (i = 0; i < TV_ML_NLISTS; i++) {
+	    int x, y;
+	    char buf[80];
+
+	    if (i / 2 == 0)
+		x = 15;
+	    else
+		x = 280;
+	    if (i % 2 == 0)
+		y = 5 + LINEHIGH * 1;
+	    else
+		y = 5 + LINEHIGH * 7 + SPACING * 3;
+
+	    sprintf(buf, "Designation for G%d:", i + 1);
+	    DrawString(cs->win, x, y + ASCENT, buf);
+
+	    LSCreate(&cs->ls[i], cs->win, x + 15, y + LINEHIGH,
+			200, LINEHIGH * 5, 5,
+			regs, nregs + 2,
+			infofg, infobg, hicol, locol, csLsRedraw, 0, 0);
+	    cs->ls[i].selected = 0;
+	}
+
+	for (i = 0; i < 2; i++) {
+	    char *p;
+	    int n;
+	    int x, y;
+
+	    if ((p = (char *) malloc(3 * 4)) == NULL)
+		FatalError("out of memory in createCsWins().");
+	    strcpy(p, "G1 G2 G3 G4");
+	    p[2] = p[5] = p[8] = '\0';
+	    n = (i == 0 ? TV_ML_GL : TV_ML_GR);
+	    x = (i == 0 ? 15 : 280);
+	    y = 235;
+	    DrawString(cs->win, x, y + ASCENT, "Assignment for GL:");
+	    x += 15;
+	    y += LINEHIGH;
+	    cs->rbt[n] = RBCreate(NULL, cs->win,
+				  x, y, p, infofg, infobg, hicol, locol);
+	    for (j = 1; j < 4; j++) {
+		p += 3;
+		x += 50;
+		RBCreate(cs->rbt[n], cs->win,
+			 x, y, p, infofg, infobg, hicol, locol);
+	    }
+	}
+
+	DrawString(cs->win, 5, 280 + ASCENT, "Ret Code:");
+	cs->rbt[TV_ML_RETCODE] =
+	    RBCreate(NULL, cs->win, 20, 300, "LF", infofg,infobg, hicol,locol);
+	RBCreate(cs->rbt[TV_ML_RETCODE], cs->win, 20, 300 + 20, "CR+LF",
+		 infofg, infobg, hicol, locol);
+	RBCreate(cs->rbt[TV_ML_RETCODE], cs->win, 90, 300, "CR",
+		 infofg, infobg, hicol, locol);
+	RBCreate(cs->rbt[TV_ML_RETCODE], cs->win, 90, 300 + 20, "Any",
+		 infofg, infobg, hicol, locol);
+
+	DrawString(cs->win, 350, 280 + ASCENT, "Converter:");
+	cs->rbt[TV_ML_CVTR] =
+	    RBCreate(NULL, cs->win, 365, 300, "Nothing",
+		     infofg, infobg, hicol, locol);
+	RBCreate(cs->rbt[TV_ML_CVTR], cs->win, 365, 300 + 20, "Shift JIS",
+		 infofg, infobg, hicol, locol);
+
+	CBCreate(&cs->cbt[TV_ML_SHORT], cs->win, 200, 300, "Short Form",
+		 infofg, infobg, hicol, locol);
+	CBCreate(&cs->cbt[TV_ML_LOCK], cs->win, 200, 320, "Locking Shift",
+		 infofg, infobg, hicol, locol);
+
+	for (j = 0; j < TV_NCSS; j++) {
+	    BTCreate(&cs->bt[j], cs->win,
+		     5 + (BUTTW3 + 5) * (j % 5),
+		     350 + 5 + (BUTTH + 5) * (j / 5),
+		     BUTTW3, BUTTH, codeSetNames[j],
+		     infofg, infobg, hicol, locol);
+	}
+	BTCreate(&cs->bt[TV_ML_ACCEPT], cs->win,
+		 CSWIDE - 10 - BUTTW3 * 2, CSHIGH - 5 - BUTTH, BUTTW3, BUTTH,
+		 "Accept", infofg, infobg, hicol, locol);
+	BTCreate(&cs->bt[TV_ML_CLOSE], cs->win,
+		 CSWIDE - 5 - BUTTW3, CSHIGH - 5 - BUTTH, BUTTW3, BUTTH,
+		 "Close", infofg, infobg, hicol, locol);
+
+	XMapSubwindows(theDisp, cs->win);
+	cs->up = 0;
+    }
+}
+
+static void openCsWin(tv)
+    TVINFO *tv;
+{
+    CSINFO *cs = tv->cs;
+    if (cs->up)
+	return;
+
+    XMapRaised(theDisp, cs->win);
+    cs->up = 1;
+    cs->tcs = cs->tv->ccs;
+    csReflect(cs);
+}
+
+static void closeCsWin(tv)
+    TVINFO *tv;
+{
+    CSINFO *cs = tv->cs;
+    if (!cs->up)
+	return;
+    cs->up = 0;
+    XUnmapWindow(theDisp, cs->win);
+}
+
+int CharsetCheckEvent(xev)
+    XEvent *xev;
+{
+    int i;
+    CSINFO *cs;
+
+    for (cs = csinfo, i = 0; i < MAXTVWIN; cs++, i++) {
+	if (!cs->up)
+	    continue;
+	if (csCheckEvent(cs, xev))
+	    break;
+    }
+    if (i < MAXTVWIN)
+	return 1;
+    return 0;
+}
+
+static int csCheckEvent(cs, xev)
+    CSINFO *cs;
+    XEvent *xev;
+{
+    RBUTT **rbp;
+    CBUTT *cbp;
+    LIST *ls;
+    BUTT *bp;
+    int i, n;
+
+    if (xev->type == Expose) {
+	int x, y, w, h;
+	XExposeEvent *e = (XExposeEvent *) xev;
+	x = e->x; y = e->y; w = e->width; h = e->height;
+
+	if (cs->win == e->window){
+	    csRedraw(cs);
+	    return 1;
+	} else {
+	    for (i = 0; i < TV_ML_NLISTS; i++) {
+		if (cs->ls[i].win == e->window) {
+		    LSRedraw(&cs->ls[i], 0);
+		    return 1;
+		}
+	    }
+	   for (i = 0; i < TV_ML_NLISTS; i++) {
+		if (cs->ls[i].scrl.win == e->window) {
+		    SCRedraw(&cs->ls[i].scrl);
+		    return 1;
+		}
+	   }
+	}
+    } else if (xev->type == ButtonPress) {
+	int x, y;
+	XButtonEvent *e = (XButtonEvent *) xev;
+	x = e->x; y = e->y;
+	if (cs->win == e->window) {
+	    for (bp = cs->bt, i = 0; i < TV_ML_NBUTTS; bp++, i++) {
+		if (PTINRECT(x, y, bp->x, bp->y, bp->w, bp->h))
+		    break;
+	    }
+	    if (i < TV_ML_NBUTTS) {
+		if (BTTrack(bp)) {
+		    if (i < TV_NCSS) {
+			cs->tcs = coding_spec[i];
+			csReflect(cs);
+		    } else {
+			switch (i) {
+			case TV_ML_ACCEPT:
+			    setCodingSpec(cs->tv, &cs->tcs);
+			    break;
+			case TV_ML_CLOSE:
+			    closeCsWin(cs->tv);
+			    break;
+			}
+		    }
+		}
+		return 1;
+	    }
+	    for (cbp = cs->cbt, i = 0; i < TV_ML_NCBUTTS; cbp++, i++) {
+		if (CBClick(cbp, x, y) && CBTrack(cbp))
+		    break;
+	    }
+	    if (i < TV_ML_NCBUTTS) {
+		switch (i) {
+		case TV_ML_SHORT:
+		    cs->tcs.coding_system.short_form = cbp->val;
+		    break;
+		case TV_ML_LOCK:
+		    cs->tcs.coding_system.lock_shift = cbp->val;
+		    break;
+		}
+		return 1;
+	    }
+	    for (rbp = cs->rbt, i = 0; i < TV_ML_NRBUTTS; rbp++, i++) {
+		if ((n = RBClick(*rbp, x, y)) >= 0 && RBTrack(*rbp, n)) {
+		    break;
+		}
+	    }
+	    if (i < TV_ML_NRBUTTS) {
+		switch (i) {
+		case TV_ML_RETCODE:
+		    cs->tcs.coding_system.eol = n;
+		    break;
+		case TV_ML_GL:
+		    cs->tcs.coding_system.gl = n;
+		    break;
+		case TV_ML_GR:
+		    cs->tcs.coding_system.gr = n;
+		    break;
+		case TV_ML_CVTR:
+		    cs->tcs.converter = cvtrtab[n];
+		    break;
+		}
+		return 1;
+	    }
+	} else {
+	    for (ls = cs->ls, i = 0; i < TV_ML_NLISTS; ls++, i++) {
+		if (ls->win == e->window) {
+		    LSClick(ls, e);
+		    n = ls->selected;
+		    if (n < nregs) {
+			char r[32], *p = r;
+			int b7;
+			strcpy(r, regs[n]);
+			if ((p = strrchr(r, '/')) != NULL) {
+			    *p = '\0';
+			    b7 = (*(p + 1) == 'R' ? 1 : 0);
+			} else
+			    b7 = 0;	/* shouldn't occur */
+			cs->tcs.coding_system.design[i] = lookup_design(r, b7);
+		    } else if (n == nregs)    /* initially none is designed. */
+			cs->tcs.coding_system.design[i].bpc = 0;
+		    else
+			cs->tcs.coding_system.design[i].bpc = -1;
+		    return 1;
+		}
+	    }
+	    for (ls = cs->ls, i = 0; i < TV_ML_NLISTS; ls++, i++) {
+		if (ls->scrl.win == e->window) {
+		    SCTrack(&ls->scrl, x, y);
+		    return 1;
+		}
+	    }
+	}
+    }
+    return 0;
+}
+
+static void csReflect(cs)
+    CSINFO *cs;
+{
+    int i;
+
+    RBSelect(cs->rbt[TV_ML_RETCODE], cs->tcs.coding_system.eol);
+    RBSelect(cs->rbt[TV_ML_GL], cs->tcs.coding_system.gl);
+    RBSelect(cs->rbt[TV_ML_GR], cs->tcs.coding_system.gr);
+    for (i = 0; i < sizeof cvtrtab / sizeof cvtrtab[0]; i++) {
+	if (cs->tcs.converter == cvtrtab[i])
+	    break;
+    }
+    if (i >= sizeof cvtrtab / sizeof cvtrtab[0])
+	FatalError("program error in csReflect().");
+    RBSelect(cs->rbt[TV_ML_CVTR], i);
+
+    cs->cbt[TV_ML_SHORT].val = cs->tcs.coding_system.short_form;
+    cs->cbt[TV_ML_LOCK].val = cs->tcs.coding_system.lock_shift;
+    for (i = 0; i < TV_ML_NLISTS; i++) {
+	struct design design = cs->tcs.coding_system.design[i];
+	char *reg, r[32];
+	int b7;
+	int n = 0;
+	switch (design.bpc) {
+	case -1:
+	    n = nregs + 1;
+	    break;
+	case 0:
+	    n = nregs;
+	    break;
+	case 1:
+	case 2:
+	    if ((reg = lookup_registry(design, &b7)) == NULL)
+		FatalError("internal error in csReflect.");
+	    sprintf(r, "%s/%s", reg, b7 ? "Right" : "Left");
+	    for (n = 0; n < nregs; n++) {
+		if (strcmp(regs[n], r) == 0)
+		    break;
+	    }
+	}
+	cs->ls[i].selected = n;
+	ScrollToCurrent(&cs->ls[i]);
+    }
+    csRedraw(cs);
+    for (i = 0; i < TV_ML_NLISTS; i++)
+	csListRedraw(&cs->ls[i]);
+}
+
+static void csRedraw(cs)
+    CSINFO *cs;
+{
+    int i;
+
+    XSetForeground(theDisp, theGC, infofg);
+    DrawString(cs->win,  5,5 + ASCENT, "Initial States");
+    for (i = 0; i < TV_ML_NLISTS; i++) {
+	int x, y;
+	char buf[80];
+
+	if (i / 2 == 0)
+	    x = 15;
+	else
+	    x = 280;
+	if (i % 2 == 0)
+	    y = 5 + LINEHIGH * 1;
+	else
+	    y = 5 + LINEHIGH * 7 + SPACING * 3;
+
+	sprintf(buf, "Designation for G%d:", i);
+	DrawString(cs->win, x, y + ASCENT, buf);
+    }
+
+    DrawString(cs->win,  15, 235 + ASCENT, "Invocation for GL:");
+    DrawString(cs->win, 280, 235 + ASCENT, "Invocation for GR:");
+    DrawString(cs->win,   5, 280 + ASCENT, "Ret Code:");
+    DrawString(cs->win, 350, 280 + ASCENT, "Converter:");
+
+    for (i = 0; i < TV_ML_NBUTTS; i++)
+	BTRedraw(&cs->bt[i]);
+    for (i = 0; i < TV_ML_NCBUTTS; i++)
+	CBRedraw(&cs->cbt[i]);
+    for (i = 0; i < TV_ML_NRBUTTS; i++)
+	RBRedraw(cs->rbt[i], -1);
+}
+
+static void csListRedraw(ls)
+    LIST *ls;
+{
+    int i;
+    for (i = 0; i < TV_ML_NLISTS; i++) {
+	LSRedraw(ls, 0);
+	SCRedraw(&ls->scrl);
+    }
+}
+
+static void csLsRedraw(delta, sptr)
+    int delta;
+    SCRL *sptr;
+{
+    int i, j;
+    for (i = 0; i < MAXTVWIN; i++) {
+	for (j = 0; j < TV_ML_NLISTS; j++) {
+	    if (sptr == &csinfo[i].ls[j].scrl) {
+		LSRedraw(&csinfo[i].ls[j], delta);
+		return;
+	    }
+	}
+    }
+}
+
+int CharsetDelWin(win)
+    Window win;
+{
+    CSINFO *cs;
+    int i;
+
+    for (cs = csinfo, i = 0; i < TV_NCSS; cs++, i++) {
+	if (cs->win == win) {
+	    if (cs->up) {
+		XUnmapWindow(theDisp, cs->win);
+		cs->up = 0;
+	    }
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+static int reg_comp PARM((const void *, const void *));
+static void create_registry_list()
+{
+    struct design d;
+    char *names, *p;
+    int i;
+
+    if ((p = names = (char *) malloc(32 * 0x80 * 2 * 2)) == NULL)
+	FatalError("out of memory in create_name_list#1.");
+    nregs = 0;
+    for (d.bpc = 1; d.bpc <=2; d.bpc++) {
+	for (d.noc = 94; d.noc <= 96; d.noc += 2) {
+	    for (d.des = ' '; (unsigned char) d.des < 0x80; d.des++) {
+		int b7;
+		char *r;
+		if ((r = lookup_registry(d, &b7)) != NULL) {
+		    sprintf(p, "%s/%s", r, b7 ? "Right" : "Left");
+		    p += strlen(p) + 1;
+		    nregs++;
+		}
+	    }
+	}
+    }
+    if ((names = (char *) realloc(names, (size_t) (p - names))) == NULL)
+	FatalError("out of memory in create_name_list#2.");
+    if ((regs = (char **) malloc(sizeof(char *) * (nregs + 3))) == NULL)
+	FatalError("out of memory in create_name_list#3.");
+    p = names;
+    for (i = 0; i < nregs; i++) {
+	regs[i] = p;
+	p += strlen(p) + 1;
+    }
+    qsort(regs, (size_t) nregs, sizeof(char *), reg_comp);
+    regs[i++] = "nothing";
+    regs[i++] = "unused";
+    regs[i++] = NULL;
+}
+static int reg_comp(dst, src)
+    const void *dst, *src;
+{
+    return strcmp(*(char **) dst, *(char **) src);
+}
+
+#endif /* TV_MULTILINGUAL */

@@ -41,10 +41,14 @@ CLEANDIR = cleandir
 
 
 ### Installation locations
-BINDIR = /usr/local/bin
-MANDIR = /usr/local/man/man1
+PREFIX = /usr/local
+BINDIR = $(PREFIX)/bin
+MANDIR = $(PREFIX)/man/man1
 MANSUF = 1
-LIBDIR = /usr/local/lib
+DOCDIR = $(PREFIX)/doc/xv-3.10a
+LIBDIR = $(PREFIX)/lib/xv
+SYSCONFDIR = $(PREFIX)/etc
+DESTDIR =
 
 
 buildit: all
@@ -59,13 +63,59 @@ buildit: all
 ### on your machine, *COMMENT OUT* the following lines
 ###
 JPEG    = -DDOJPEG
-JPEGDIR = jpeg
-JPEGINC = -I$(JPEGDIR)
-JPEGLIB = $(JPEGDIR)/libjpeg.a
-$(JPEGDIR)/jconfig.h:
-	cd $(JPEGDIR) ; ./configure CC='$(CC)'
-$(JPEGLIB):  $(JPEGDIR)/jconfig.h
-	cd $(JPEGDIR) ; make
+#JPEGDIR = jpeg
+JPEGDIR = /usr
+#JPEGDIR = /usr/local
+#JPEGDIR = ../../libjpeg
+###
+JPEGINC = -I$(JPEGDIR)/include
+#JPEGINC = -I$(JPEGDIR)
+###
+JPEGLIB = -L$(JPEGDIR)/lib -ljpeg
+#JPEGLIB = -L$(JPEGDIR) -ljpeg
+#JPEGLIB = $(JPEGDIR)/libjpeg.a
+###
+### this is intended to build the ancient version (5a) that's included in the
+### "jpeg" subdir of XV, not an arbitrary copy of libjpeg:
+###
+#$(JPEGDIR)/jconfig.h:
+#	cd $(JPEGDIR) ; ./configure CC='$(CC)'
+#$(JPEGLIB):  $(JPEGDIR)/jconfig.h
+#	cd $(JPEGDIR) ; make
+
+
+###
+### if, for whatever reason, you're unable to get the PNG library to compile
+### on your machine, *COMMENT OUT* the following lines
+###
+PNG    = -DDOPNG
+PNGDIR = /usr
+#PNGDIR = /usr/local
+#PNGDIR = ../../libpng
+###
+PNGINC = -I$(PNGDIR)/include
+#PNGINC = -I$(PNGDIR)
+###
+PNGLIB = -L$(PNGDIR)/lib -lpng
+#PNGLIB = -L$(PNGDIR) -lpng
+#PNGLIB = $(PNGDIR)/libpng.a
+
+
+###
+### if, for whatever reason, you're unable to get both the PNG library and
+### (newer versions of) the TIFF library to compile on your machine, *COMMENT
+### OUT* the following lines
+###
+ZLIBDIR = /usr
+#ZLIBDIR = /usr/local
+#ZLIBDIR = ../../zlib
+###
+ZLIBINC = -I$(ZLIBDIR)/include
+#ZLIBINC = -I$(ZLIBDIR)
+###
+ZLIBLIB = -L$(ZLIBDIR)/lib -lz
+#ZLIBLIB = -L$(ZLIBDIR) -lz
+#ZLIBLIB = $(ZLIBDIR)/libz.a
 
 
 ###
@@ -80,17 +130,32 @@ $(JPEGLIB):  $(JPEGDIR)/jconfig.h
 ###
 #TIFF    = -DDOTIFF
 TIFF    = -DDOTIFF -DUSE_TILED_TIFF_BOTLEFT_FIX
-TIFFDIR = tiff
-TIFFINC = -I$(TIFFDIR)
-TIFFLIB = $(TIFFDIR)/libtiff.a
-$(TIFFLIB):
-	( cd $(TIFFDIR) ; make CC='$(CC)' COPTS='$(CCOPTS) $(MCHN)' )
+#TIFFDIR = tiff
+TIFFDIR = /usr
+#TIFFDIR = /usr/local
+#TIFFDIR = ../../libtiff
+###
+TIFFINC = -I$(TIFFDIR)/include
+#TIFFINC = -I$(TIFFDIR)
+###
+### libtiff 3.5 and up may be compiled with zlib and libjpeg, but dependency
+### is properly handled in LIBS line ~143 lines below
+###
+TIFFLIB = -L$(TIFFDIR)/lib -ltiff
+#TIFFLIB = -L$(TIFFDIR) -ltiff
+#TIFFLIB = $(TIFFDIR)/libtiff.a
+###
+### this is intended to build the ancient version (3.3.016 beta) that's included
+### in the "tiff" subdir of XV, not an arbitrary copy of libtiff:
+###
+#$(TIFFLIB):
+#	( cd $(TIFFDIR) ; make CC='$(CC)' COPTS='$(CCOPTS) $(MCHN)' )
 
 
 ###
 ### if, for whatever reason, you're unable to get the PDS/VICAR support
 ### to compile (xvpds.c, and vdcomp.c), *COMMENT OUT* the following line,
-### and also remove 'vdcomp' from the 'all:' dependancy
+### and also remove 'vdcomp' from the 'all:' dependency
 ###
 PDS = -DDOPDS
 
@@ -98,8 +163,10 @@ PDS = -DDOPDS
 #----------System V----------
 
 # if you are running on a SysV-based machine, such as HP, Silicon Graphics,
-# Solaris, etc., uncomment the following line to get mostly there.
-#UNIX = -DSVR4
+# Solaris, etc.; uncomment one of the following lines to get you *most* of
+# the way there.  SYSV means System V R3.
+# UNIX = -DSVR4
+# UNIX = -DSYSV
 
 
 #----------Machine-Specific Configurations----------
@@ -121,12 +188,15 @@ PDS = -DDOPDS
 # To use old HP compilers (HPUX 7.0 or so), you may need
 #MCHN= -Dhpux -D_HPUX_SOURCE +Ns4000
 #
-# also, if you're using HP's compiler, add '-Aa' to whichever of those
+# Also, if you're using HP's compiler, add '-Aa' to whichever of those
 # two lines you're using, to turn on ANSI C mode.  Or so I'm told.
 #
-# note:  You may need to add '-I/usr/include/X11R5' (or R6, or whatever)
+# Note:  You may need to add '-I/usr/include/X11R5' (or R6, or whatever)
 # to whichever of those lines you used, as HP tends to store their X11
 # include files in a non-standard place...
+#
+# And you probably have to add '-lV3' to the end of the LIBS def when
+# using XV's AUTO_EXPAND option.
 
 
 ### for LINUX, uncomment the following line
@@ -205,6 +275,16 @@ PDS = -DDOPDS
 #VPRINTF = -DNEED_VPRINTF -DLONGINT -DNOSTDHDRS
 
 
+# if your X Window System compiled with -DX_LOCALE, 
+# uncomment the following line:
+# TVL10N = -DX_LOCALE
+
+# Install directory of xv_mgcsfx.sample.
+MGCSFXDIR = $(LIBDIR)
+# Directory of default configuration file.
+MGCSFX = -DMGCSFXDIR=\"$(MGCSFXDIR)\"
+
+
 
 
 ################ END OF CONFIGURATION OPTIONS #################
@@ -212,13 +292,14 @@ PDS = -DDOPDS
 
 
 
-CFLAGS = $(CCOPTS) $(JPEG) $(JPEGINC) $(TIFF) $(TIFFINC) $(PDS) \
-	$(NODIRENT) $(VPRINTF) $(TIMERS) $(UNIX) $(BSDTYPES) $(RAND) \
-	$(DXWM) $(MCHN)
+CFLAGS = $(CCOPTS) $(PNG) $(PNGINC) $(ZLIBINC) $(JPEG) $(JPEGINC) \
+	$(TIFF) $(TIFFINC) $(PDS) $(NODIRENT) $(VPRINTF) $(TIMERS) \
+	$(UNIX) $(BSDTYPES) $(RAND) $(DXWM) $(MCHN) $(TVL10N) $(MGCSFX) \
+	-DSYSCONFDIR=\"$(SYSCONFDIR)\" -DXVEXECPATH=\"$(LIBDIR)\"
 
 ### remove -lm for BeOS:
-LIBS = -lX11 $(JPEGLIB) $(TIFFLIB) -lm
-#LIBS = -lX11 $(JPEGLIB) $(TIFFLIB)
+LIBS = $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIBLIB) -L/usr/X11R6/lib -lX11 -lm
+#LIBS = $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIBLIB) -lX11
 
 OBJS = 	xv.o xvevent.o xvroot.o xvmisc.o xvimage.o xvcolor.o xvsmooth.o \
 	xv24to8.o xvgif.o xvpm.o xvinfo.o xvctrl.o xvscrl.o xvalg.o \
@@ -226,7 +307,9 @@ OBJS = 	xv.o xvevent.o xvroot.o xvmisc.o xvimage.o xvcolor.o xvsmooth.o \
 	xvdial.o xvgraf.o xvsunras.o xvjpeg.o xvps.o xvpopup.o xvdflt.o \
 	xvtiff.o xvtiffwr.o xvpds.o xvrle.o xviris.o xvgrab.o vprintf.o \
 	xvbrowse.o xvtext.o xvpcx.o xviff.o xvtarga.o xvxpm.o xvcut.o \
-	xvxwd.o xvfits.o
+	xvxwd.o xvfits.o xvpng.o xvzx.o xvwbmp.o xvpcd.o xvhips.o \
+	xvmag.o xvpic.o xvmaki.o xvpi.o xvpic2.o xvvd.o xvmgcsfx.o \
+	xvml.o
 
 MISC = README INSTALL CHANGELOG IDEAS
 
@@ -236,10 +319,12 @@ MISC = README INSTALL CHANGELOG IDEAS
 
 
 
-all: $(JPEGLIB) $(TIFFLIB) xv bggen vdcomp xcmap xvpictoppm
+#all: $(JPEGLIB) $(TIFFLIB) xv bggen vdcomp xcmap xvpictoppm
+all: xv bggen vdcomp xcmap xvpictoppm
 
 
-xv: $(OBJS) $(JPEGLIB) $(TIFFLIB)
+#xv: $(OBJS) $(JPEGLIB) $(TIFFLIB)
+xv: $(OBJS)
 	$(CC) -o xv $(CFLAGS) $(OBJS) $(LIBS)
 
 bggen: bggen.c
@@ -268,13 +353,14 @@ clean:  xvclean
 
 
 install: all
-	cp xv bggen vdcomp xcmap xvpictoppm $(BINDIR)
-	cp docs/xv.man     $(MANDIR)/xv.$(MANSUF)
-	cp docs/bggen.man  $(MANDIR)/bggen.$(MANSUF)
-	cp docs/xcmap.man  $(MANDIR)/xcmap.$(MANSUF)
-	cp docs/xvp2p.man  $(MANDIR)/xvpictoppm.$(MANSUF)
-	cp docs/vdcomp.man $(MANDIR)/vdcomp.$(MANSUF)
-	cp docs/xvdocs.ps* $(LIBDIR)
+	cp xv bggen vdcomp xcmap xvpictoppm $(DESTDIR)$(BINDIR)
+	cp docs/xv.man     $(DESTDIR)$(MANDIR)/xv.$(MANSUF)
+	cp docs/bggen.man  $(DESTDIR)$(MANDIR)/bggen.$(MANSUF)
+	cp docs/xcmap.man  $(DESTDIR)$(MANDIR)/xcmap.$(MANSUF)
+	cp docs/xvp2p.man  $(DESTDIR)$(MANDIR)/xvpictoppm.$(MANSUF)
+	cp docs/vdcomp.man $(DESTDIR)$(MANDIR)/vdcomp.$(MANSUF)
+	cp docs/xvdocs.ps* $(DESTDIR)$(LIBDIR) # or $(DESTDIR)$(DOCDIR)
+	#cp xv_mgcsfx.sample $(DESTDIR)$(SYSCONFDIR)/xv_mgcsfx
 
 tar:
 #	tar only local jpeg and tiff dirs, not user's or system's copies:
@@ -299,7 +385,7 @@ xvbrowse.o:	bits/br_sunras bits/br_bmp bits/br_utah bits/br_iris
 xvbrowse.o:	bits/br_pcx bits/br_jfif bits/br_tiff bits/br_pds
 xvbrowse.o:	bits/br_ps bits/br_iff bits/br_targa bits/br_xpm
 xvbrowse.o:	bits/br_trash bits/fcurs bits/fccurs bits/fdcurs bits/fcursm
-xvbrowse.o:	bits/br_xwd
+xvbrowse.o:	bits/br_xwd bits/br_png bits/br_zx bits/br_pcd bits/br_bzip2
 
 xvbutt.o:	bits/cboard50 bits/rb_frame bits/rb_frame1 bits/rb_top
 xvbutt.o:	bits/rb_bot bits/rb_dtop bits/rb_dbot bits/rb_body

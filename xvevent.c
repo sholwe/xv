@@ -64,6 +64,8 @@ static void   blurPixel        PARM((int, int));
 
 static void   annotatePic      PARM((void));
 
+static int    debkludge_offx;
+static int    debkludge_offy;
 
 /****************/
 int EventLoop()
@@ -71,12 +73,24 @@ int EventLoop()
 {
   XEvent event;
   int    retval,done,waiting;
-  time_t orgtime, curtime;
+#ifdef USE_TICKS
+  clock_t waitsec_ticks=0L, orgtime_ticks=0L, curtime_ticks;
+  clock_t elapsed_ticks=0L, remaining_interval;
+#else
+  time_t orgtime=0L, curtime;
+#endif
 
 
 #ifndef NOSIGNAL
   signal(SIGQUIT, onInterrupt);
 #endif
+
+  if (startGrab == 1) {
+     startGrab = 2;
+     FakeButtonPress(&but[BGRAB]);
+     FakeKeyPress(ctrlW, XK_Return);
+     return(1);
+  }
 
   /* note: there's no special event handling if we're using the root window.
      if we're using the root window, we will recieve NO events for mainW */
@@ -100,18 +114,24 @@ int EventLoop()
 
   while (!done) {
 
-    if (waitsec > -1 && canstartwait && !waiting && XPending(theDisp)==0) {
+    if (waitsec >= 0.0 && canstartwait && !waiting && XPending(theDisp)==0) {
       /* we wanna wait, we can wait, we haven't started waiting yet, and
 	 all pending events (ie, drawing the image the first time)
 	 have been dealt with:  START WAITING */
-      time((time_t *) &orgtime);
+#ifdef USE_TICKS
+      waitsec_ticks = (clock_t)(waitsec * CLK_TCK);
+      orgtime_ticks = times(NULL);  /* unclear if NULL valid, but OK on Linux */
+#else
+      orgtime = time(NULL);
+#endif
       waiting = 1;
     }
 
 
     /* if there's an XEvent pending *or* we're not doing anything
        in real-time (polling, flashing the selection, etc.) get next event */
-    if ((waitsec==-1 && !polling && !HaveSelection()) || XPending(theDisp)>0) {
+    if ((waitsec<0.0 && !polling && !HaveSelection()) || XPending(theDisp)>0)
+    {
       XNextEvent(theDisp, &event);
       retval = HandleEvent(&event,&done);
     }
@@ -121,7 +141,7 @@ int EventLoop()
 	DrawSelection(0);
 	DrawSelection(1);
 	XFlush(theDisp);
-	Timer(200);
+	Timer(200);             /* milliseconds */
       }
 
       if (polling) {
@@ -129,13 +149,32 @@ int EventLoop()
 	else if (!XPending(theDisp)) sleep(1);
       }
 
-      if (waitsec>-1 && waiting) {
-	time((time_t *) &curtime);
-	if (curtime - orgtime < waitsec) sleep(1);
-	else {
-	  if (waitloop) return NEXTLOOP;
-	  else return NEXTQUIT;
-	}
+      if (waitsec>=0.0 && waiting) {
+#ifdef USE_TICKS
+        curtime_ticks = times(NULL);   /* value in ticks */
+        if (curtime_ticks < orgtime_ticks) {
+          /* clock ticks rolled over:  need to correct for that (i.e.,
+           *  curtime_ticks is presumably quite small, while orgtime_ticks
+           *  should be close to LONG_MAX, so do math accordingly--any way
+           *  to check whether clock_t is *not* a signed long?) */
+          elapsed_ticks = curtime_ticks + (LONG_MAX - orgtime_ticks);
+        } else
+          elapsed_ticks = curtime_ticks - orgtime_ticks;
+        remaining_interval = waitsec_ticks - elapsed_ticks;
+        if (remaining_interval >= (clock_t)(1 * CLK_TCK))
+          sleep(1);
+        else {
+          /* less than one second remaining:  do delay in msec, then return */
+          Timer((remaining_interval * 1000L) / CLK_TCK);  /* can't overflow */
+          return waitloop? NEXTLOOP : NEXTQUIT;
+        }
+#else
+        curtime = time(NULL);          /* value in seconds */
+	if (curtime - orgtime < (time_t)waitsec)
+          sleep(1);
+	else
+          return waitloop? NEXTLOOP : NEXTQUIT;
+#endif
       }
     }
   }  /* while (!done) */
@@ -154,7 +193,24 @@ int HandleEvent(event, donep)
      int    *donep;
 {
   static int wasInfoUp=0, wasCtrlUp=0, wasDirUp=0, wasGamUp=0, wasPsUp=0;
-  static int wasJpegUp=0, wasTiffUp=0;
+#ifdef HAVE_JPEG
+  static int wasJpegUp=0;
+#endif
+#ifdef HAVE_TIFF
+  static int wasTiffUp=0;
+#endif
+#ifdef HAVE_PNG
+  static int wasPngUp=0;
+#endif
+#ifdef HAVE_PCD
+  static int wasPcdUp=0;
+#endif
+#ifdef HAVE_PIC2
+  static int wasPic2Up=0;
+#endif
+#ifdef HAVE_MGCSFX
+  static int wasMgcSfxUp=0;
+#endif
 
   static int mainWKludge=0;  /* force first mainW expose after a mainW config
 				to redraw all of mainW */
@@ -231,6 +287,28 @@ int HandleEvent(event, donep)
 
 #ifdef HAVE_TIFF
     if (TIFFCheckEvent(event)) break;   /* event has been processed */
+#endif
+
+#ifdef HAVE_PNG
+    if (PNGCheckEvent (event)) break;   /* event has been processed */
+#endif
+
+    if (PCDCheckEvent(event)) break;    /* event has been processed */
+
+#ifdef HAVE_PIC2
+    if (PIC2CheckEvent(event)) break;   /* event has been processed */
+#endif
+
+#ifdef HAVE_PCD
+    if (PCDCheckEvent (event)) break;   /* event has been processed */
+#endif
+
+#ifdef HAVE_MGCSFX
+    if (MGCSFXCheckEvent(event)) break; /* event has been processed */
+#endif
+
+#ifdef TV_MULTILINGUAL
+    if (CharsetCheckEvent(event)) break; /* event has been processed */
 #endif
 
     if (GamCheckEvent (event)) break;   /* event has been processed */
@@ -344,6 +422,9 @@ int HandleEvent(event, donep)
 
       if (BrowseDelWin(client_event->window)) break;
       if (TextDelWin(client_event->window)) break;
+#ifdef TV_MULTILINGUAL
+      if (CharsetDelWin(client_event->window)) break;
+#endif
 
       if      (client_event->window == infoW) InfoBox(0);
       else if (client_event->window == gamW)  GamBox(0);
@@ -357,6 +438,24 @@ int HandleEvent(event, donep)
 
 #ifdef HAVE_TIFF
       else if (client_event->window == tiffW) TIFFDialog(0);
+#endif
+
+#ifdef HAVE_PNG
+      else if (client_event->window == pngW)  PNGDialog(0);
+#endif
+
+      else if (client_event->window == pcdW)  PCDDialog(0);
+
+#ifdef HAVE_PIC2
+      else if (client_event->window == pic2W) PIC2Dialog(0);
+#endif
+
+#ifdef HAVE_PCD
+      else if (client_event->window == pcdW)  PCDDialog(0);
+#endif
+
+#ifdef HAVE_MGCSFX
+      else if (client_event->window == mgcsfxW) MGCSFXDialog(0);
 #endif
 
       else if (client_event->window == mainW) Quit(0);
@@ -534,9 +633,20 @@ int HandleEvent(event, donep)
 #ifdef HAVE_JPEG
 	if (wasJpegUp) { JPEGDialog(wasJpegUp);  wasJpegUp=0; }
 #endif
-
 #ifdef HAVE_TIFF
 	if (wasTiffUp) { TIFFDialog(wasTiffUp);  wasTiffUp=0; }
+#endif
+#ifdef HAVE_PNG
+	if (wasPngUp)  { PNGDialog(wasJpegUp);   wasPngUp=0; }
+#endif
+#ifdef HAVE_PCD
+	if (wasPcdUp)  { PCDDialog(wasPcdUp);    wasPcdUp=0; }
+#endif
+#ifdef HAVE_PIC2
+	if (wasPic2Up) { PIC2Dialog(wasPic2Up);  wasPic2Up=0; }
+#endif
+#ifdef HAVE_MGCSFX
+	if (wasMgcSfxUp) { MGCSFXDialog(wasMgcSfxUp);  wasMgcSfxUp=0; }
 #endif
       }
     }
@@ -572,9 +682,20 @@ int HandleEvent(event, donep)
 #ifdef HAVE_JPEG
 	  if (jpegUp) { wasJpegUp = jpegUp;  JPEGDialog(0); }
 #endif
-
 #ifdef HAVE_TIFF
 	  if (tiffUp) { wasTiffUp = tiffUp;  TIFFDialog(0); }
+#endif
+#ifdef HAVE_PNG
+	  if (pngUp)  { wasPngUp  = pngUp;   PNGDialog(0); }
+#endif
+#ifdef HAVE_PCD
+	  if (pcdUp)  { wasPcdUp = pcdUp;    PCDDialog(0); }
+#endif
+#ifdef HAVE_PIC2
+	  if (pic2Up) { wasPic2Up = pic2Up;  PIC2Dialog(0); }
+#endif
+#ifdef HAVE_MGCSFX
+	  if (mgcsfxUp) { wasMgcSfxUp = mgcsfxUp;  MGCSFXDialog(0); }
 #endif
 	}
       }
@@ -639,6 +760,30 @@ int HandleEvent(event, donep)
 
 	p_offx = xwa.x;
 	p_offy = xwa.y;
+      }
+
+      /* Gather info to keep right border inside */
+      {
+	Window current;
+	Window root_r;
+	Window parent_r;
+	Window *children_r;
+	int nchildren_r;
+	XWindowAttributes xwa;
+
+	parent_r=mainW;
+	current=mainW;
+	do {
+	  current=parent_r;
+	  XQueryTree(theDisp, current, &root_r, &parent_r,
+		     &children_r, &nchildren_r);
+	  if (children_r!=NULL) {
+	    XFree(children_r);
+	  }
+	} while(parent_r!=root_r);
+	XGetWindowAttributes(theDisp, current, &xwa);
+	debkludge_offx=eWIDE-xwa.width+p_offx;
+	debkludge_offy=eHIGH-xwa.height+p_offy;
       }
 
 
@@ -997,7 +1142,8 @@ void DoPrint()
 
   int          i;
   char         txt[512], str[PRINTCMDLEN + 10];
-  static char *labels[] = { " Color", " Grayscale", " B/W", "\033Cancel" };
+  static char *labels[] = { "\03Color", "\07Grayscale", " B/W", "\033Cancel" };
+                          /* ^B ("\02") already used for moving cursor back */
 
   strcpy(txt, "Print:  Enter a command that will read a PostScript file ");
   strcat(txt, "from stdin and print it to the desired printer.\n\n");
@@ -1147,6 +1293,26 @@ static void handleButtonEvent(event, donep, retvalp)
     if (TIFFCheckEvent(event)) break;
 #endif
 
+#ifdef HAVE_PNG
+    if (PNGCheckEvent (event)) break;
+#endif
+
+#ifdef HAVE_PCD
+    if (PCDCheckEvent (event)) break;	/* event has been processed */
+#endif
+
+#ifdef HAVE_PIC2
+    if (PIC2CheckEvent(event)) break;
+#endif
+
+#ifdef HAVE_MGCSFX
+    if (MGCSFXCheckEvent(event)) break;
+#endif
+
+#ifdef TV_MULTILINGUAL
+    if (CharsetCheckEvent(event)) break;
+#endif
+
     if (GamCheckEvent (event)) break;
     if (BrowseCheckEvent (event, &retval, &done)) break;
     if (TextCheckEvent   (event, &retval, &done)) break;
@@ -1276,6 +1442,48 @@ static void handleButtonEvent(event, donep, retvalp)
       else if (shift) BlurPaint();
       break;
 
+    case Button4:   /* note min vs. max, + vs. - */
+      if (win == ctrlW || win == nList.win || win == nList.scrl.win) {
+	SCRL *sp=&nList.scrl;
+	int  halfpage=sp->page/2;
+
+	if (sp->val > sp->min+halfpage)
+	  SCSetVal(sp,sp->val-halfpage);
+	else
+	  SCSetVal(sp,sp->min);
+      }
+      else if (win ==  dirW || win == dList.win || win == dList.scrl.win) {
+	SCRL *sp=&dList.scrl;
+	int  halfpage=sp->page/2;
+
+	if (sp->val > sp->min+halfpage)
+	  SCSetVal(sp,sp->val-halfpage);
+	else
+	  SCSetVal(sp,sp->min);
+      }
+      break;
+
+    case Button5:   /* note max vs. min, - vs. + */
+      if (win == ctrlW || win == nList.win || win == nList.scrl.win) {
+	SCRL *sp=&nList.scrl;
+	int  halfpage=sp->page/2;
+
+	if (sp->val < sp->max-halfpage)
+	  SCSetVal(sp,sp->val+halfpage);
+	else
+	  SCSetVal(sp,sp->max);
+      }
+      else if (win ==  dirW || win == dList.win || win == dList.scrl.win) {
+	SCRL *sp=&dList.scrl;
+	int  halfpage=sp->page/2;
+
+	if (sp->val < sp->max-halfpage)
+	  SCSetVal(sp,sp->val+halfpage);
+	else
+	  SCSetVal(sp,sp->max);
+      }
+      break;
+
     default:       break;
     }
   }
@@ -1364,16 +1572,35 @@ static void handleKeyEvent(event, donep, retvalp)
     if (TIFFCheckEvent(event)) break;
 #endif
 
+#ifdef HAVE_PNG
+    if (PNGCheckEvent (event)) break;
+#endif
+
+    if (PCDCheckEvent (event)) break;
+
+#ifdef HAVE_PIC2
+    if (PIC2CheckEvent(event)) break;
+#endif
+
+#ifdef HAVE_PCD
+    if (PCDCheckEvent (event)) break;
+#endif
+
+#ifdef HAVE_MGCSFX
+    if (MGCSFXCheckEvent(event)) break;
+#endif
+
     if (GamCheckEvent (event)) break;
     if (BrowseCheckEvent (event, &retval, &done)) break;
     if (TextCheckEvent   (event, &retval, &done)) break;
 
 
-    /* check for pageup/pagedown, 'p' in main window
-       (you can use shift-up or shift-down if no crop rectangle drawn)
-       (for viewing multipage docs) */
+    /* Support for multi-image files ("multipage docs").  Check for PgUp/PgDn
+       or 'p' in any window but control or directory; PgUp/PgDn are already
+       used to page through the file list in those windows.  If no cropping
+       rectangle is active, shift-Up and shift-Down also work. */
 
-    if (key_event->window == mainW) {
+    if (key_event->window != ctrlW && key_event->window != dirW) {
       dealt = 1;
 
       ck = CursorKey(ks, shift, 0);
@@ -1578,13 +1805,13 @@ static void handleKeyEvent(event, donep, retvalp)
 	}
 	break;
 
-      case '\010':
-      case '\177': FakeButtonPress(&but[BPREV]);    break;
+      case '\010': FakeButtonPress(&but[BPREV]);    break;
 
 
       case '\014': FakeButtonPress(&but[BLOAD]);    break;  /* ^L */
       case '\023': FakeButtonPress(&but[BSAVE]);    break;  /* ^S */
       case '\020': FakeButtonPress(&but[BPRINT]);   break;  /* ^P */
+      case '\177':
       case '\004': FakeButtonPress(&but[BDELETE]);  break;  /* ^D */
 
 	/* BCOPY, BCUT, BPASTE, BCLEAR handled in 'meta' case */
@@ -2025,6 +2252,16 @@ XWindowAttributes *xwa;
   if (xwa->width  < dispWIDE && xwc.x < p_offx) xwc.x = p_offx;
   if (xwa->height < dispHIGH && xwc.y < p_offy) xwc.y = p_offy;
 
+  /* Try to keep bottom right decorations inside */
+  if (xwc.x+eWIDE-debkludge_offx>dispWIDE) {
+    xwc.x=dispWIDE-eWIDE+debkludge_offx;
+    if (xwc.x<0) xwc.x=0;
+  }
+  if (xwc.y+eHIGH-debkludge_offy>dispHIGH) {
+    xwc.y=dispHIGH-eHIGH+debkludge_offy;
+    if (xwc.y<0) xwc.y=0;
+  }
+
   xwc.width  = xwa->width;
   xwc.height = xwa->height;
 
@@ -2370,6 +2607,24 @@ static void onInterrupt(i)
   if (tiffUp) TIFFDialog(0);  /* close tiff window */
 #endif
 
+#ifdef HAVE_PNG
+  if (pngUp) PNGDialog(0);    /* close png window */
+#endif
+
+  if (pcdUp) PCDDialog(0);    /* close pcd window */
+
+#ifdef HAVE_PIC2
+  if (pic2Up) PIC2Dialog(0);  /* close pic2 window */
+#endif
+
+#ifdef HAVE_PCD
+  if (pcdUp)  PCDDialog(0);   /* close pcd window */
+#endif
+
+#ifdef HAVE_MGCSFX
+  if (mgcsfxUp) MGCSFXDialog(0);  /* close mgcsfx window */
+#endif
+
   ClosePopUp();
 
   /* make the interrupt signal look like a '\n' keypress in ctrlW */
@@ -2574,26 +2829,43 @@ static void paintPixel(x,y)
 static void paintLine(x,y,x1,y1)
   int x,y,x1,y1;
 {
-  int dx,dy,i,lx,ly,adx,ady;
+  int t,dx,dy,d,dd;
 
-  dx = x1-x;  dy = y1-y;
-  adx = abs(dx);  ady = abs(dy);
+  dx = abs(x1-x);  dy = abs(y1-y);
 
-  if (dx == 0 && dy == 0) paintPixel(x,y);
-
-  else if (adx > ady) {           /* X is major axis */
-    for (i=0; i<=adx; i++) {
-      lx = x + (i * dx + (adx/2)) / abs(dx);
-      ly = y + (i * dy + (adx/2)) / abs(dx);
-      paintPixel(lx,ly);
+  if (dx >= dy) {                       /* X is major axis */
+    if (x > x1) {
+       t = x; x = x1; x1 = t;
+       t = y; y = y1; y1 = t;
+     }
+    d = dy + dy - dx;
+    dd = y < y1 ? 1 : -1;
+    while (x <= x1) {
+      paintPixel(x,y);
+      if (d > 0) {
+        y += dd;
+        d -= dx + dx;
+      }
+      ++x;
+      d += dy + dy;
     }
   }
 
   else {                                /* Y is major axis */
-    for (i=0; i<=ady; i++) {
-      lx = x + (i * dx + (ady/2)) / ady;
-      ly = y + (i * dy + (ady/2)) / ady;
-      paintPixel(lx,ly);
+    if (y > y1) {
+       t = x; x = x1; x1 = t;
+       t = y; y = y1; y1 = t;
+     }
+    d = dx + dx - dy;
+    dd = x < x1 ? 1 : -1;
+    while (y <= y1) {
+      paintPixel(x,y);
+      if (d > 0) {
+        x += dd;
+        d -= dy + dy;
+      }
+      ++y;
+      d += dx + dx;
     }
   }
 

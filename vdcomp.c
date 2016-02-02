@@ -106,6 +106,7 @@
      !defined(pyr)                       && \
      !defined(__UMAXV__)                 && \
      !defined(bsd43)                     && \
+     !defined(__bsd43)                   && \
      !defined(aux)                       && \
      !defined(__bsdi__)                  && \
      !defined(sequent)                   && \
@@ -115,7 +116,14 @@
 #  if defined(hp300) || defined(hp800) || defined(NeXT)
 #   include <sys/malloc.h>                /* it's in 'sys' on HPs and NeXT */
 #  else
-#   include <malloc.h>
+#   if !defined(__386BSD__) && !defined(__FreeBSD__) && !defined(__NetBSD__)
+    /*
+     I want to use BSD macro for checking if this OS is *BSD or not,
+     but the macro is defined in <sys/parm.h>, which I don't know all
+     machine has or not.
+     */
+#     include <malloc.h>
+#   endif
 #  endif
 # endif
 #endif /* !VMS */

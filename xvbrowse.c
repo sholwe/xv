@@ -24,6 +24,10 @@
 typedef unsigned int mode_t;  /* file mode bits */
 #endif
 
+#ifndef MAX
+#  define MAX(a,b) (((a)>(b))?(a):(b))   /* used only for wheelmouse support */
+#endif
+
 
 /* load up built-in icons */
 #include "bits/br_file"
@@ -36,6 +40,7 @@ typedef unsigned int mode_t;  /* file mode bits */
 #include "bits/br_error"
 /* #include "bits/br_unknown"	commented out (near line 492) */
 #include "bits/br_cmpres"
+#include "bits/br_bzip2"
 
 #include "bits/br_gif"
 #include "bits/br_pm"
@@ -50,11 +55,20 @@ typedef unsigned int mode_t;  /* file mode bits */
 #include "bits/br_tiff"
 #include "bits/br_pds"
 #include "bits/br_ps"
+#include "bits/br_pcd"
 #include "bits/br_iff"
 #include "bits/br_targa"
 #include "bits/br_xpm"
 #include "bits/br_xwd"
 #include "bits/br_fits"
+#include "bits/br_png"
+#include "bits/br_zx"	/* [JCE] The Spectrum+3 icon */
+#include "bits/br_mag"
+#include "bits/br_maki"
+#include "bits/br_pic"
+#include "bits/br_pi"
+#include "bits/br_pic2"
+#include "bits/br_mgcsfx"
 
 #include "bits/br_trash"
 #include "bits/fcurs"
@@ -94,13 +108,22 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define BF_XPM      25
 #define BF_XWD      26
 #define BF_FITS     27
-#define BF_MAX      28    /* # of built-in icons */
+#define BF_PNG      28
+#define BF_ZX       29    /* [JCE] Spectrum SCREEN$ */
+#define BF_PCD      30
+#define BF_BZIP2    31
+#define JP_EXT_BF   (BF_BZIP2)
+#define BF_MAG      (JP_EXT_BF + 1)
+#define BF_MAKI     (JP_EXT_BF + 2)
+#define BF_PIC      (JP_EXT_BF + 3)
+#define BF_PI       (JP_EXT_BF + 4)
+#define BF_PIC2     (JP_EXT_BF + 5)
+#define BF_MGCSFX   (JP_EXT_BF + 6)
+#define JP_EXT_BF_END  (BF_MGCSFX)
+#define BF_MAX      (JP_EXT_BF_END + 1)    /* # of built-in icons */
 
 #define ISLOADABLE(ftyp) (ftyp!=BF_DIR  && ftyp!=BF_CHR && ftyp!=BF_BLK && \
 			  ftyp!=BF_SOCK && ftyp!=BF_FIFO)
-
-#define DEF_BROWWIDE 615   /* default size of window */
-#define DEF_BROWHIGH 356
 
 #define SCROLLVERT  8      /* height of scroll region at top/bottom of iconw */
 #define PAGEVERT    40     /* during rect drag, if further than this, page */
@@ -113,15 +136,34 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define BOTMARGIN 58       /* room for a row of buttons and a line of text */
 #define LRMARGINS 5        /* left and right margins */
 
-#define ISIZE_WIDE   80    /* maximum size of an icon */
-#define ISIZE_HIGH   60
+/* some people like bigger icons; 4:3 aspect ratio is recommended
+ * (NOTE:  standard XV binaries will not be able to read larger icons!) */
+#ifndef ISIZE_WIDE
+#  define ISIZE_WIDE 80    /* maximum size of an icon */
+#endif
+#ifndef ISIZE_HIGH
+#  define ISIZE_HIGH 60
+#endif
 
-#define ISPACE_WIDE (ISIZE_WIDE+16)   /* icon spacing */
+#ifndef ISIZE_WPAD
+#  define ISIZE_WPAD 16    /* extra horizontal padding between icons */
+#endif
+
+#ifndef INUM_WIDE
+#  define INUM_WIDE 6      /* size initial window to hold this many icons */
+#endif
+#ifndef INUM_HIGH
+#  define INUM_HIGH 3
+#endif
+
+#define ISPACE_WIDE (ISIZE_WIDE+ISIZE_WPAD)   /* icon spacing */
 #define ISPACE_TOP  4                 /* dist btwn top of ISPACE and ISIZE */
 #define ISPACE_TTOP 4                 /* dist btwn bot of icon and title */
 #define ISPACE_HIGH (ISIZE_HIGH+ISPACE_TOP+ISPACE_TTOP+16+4)
 
 #define DBLCLICKTIME 300  /* milliseconds */
+
+#define COUNT(x) (sizeof (x) / sizeof (x)[0])
 
 /* button/menu indicies */
 #define BR_CHDIR    0
@@ -140,11 +182,22 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define BR_NBUTTS   13   /* # of command buttons */
 #define BR_SEP1     13   /* separator */
 #define BR_HIDDEN   14
+#ifdef AUTO_EXPAND
+#define BR_CLEARVD  15
+#define BR_SELFILES 16
+#define BR_NCMDS    17   /* # of menu commands */
+#else
 #define BR_SELFILES 15
 #define BR_NCMDS    16   /* # of menu commands */
+#endif
 
 #define BUTTW 80
 #define BUTTH 24
+
+/* original size of window was 615 x 356 (for 80x60 thumbnails in 6x3 array) */
+#define DEF_BROWWIDE  (ISPACE_WIDE * INUM_WIDE + LRMARGINS * 2 + 29)
+#define DEF_BROWHIGH  (ISPACE_HIGH * INUM_HIGH + BUTTH * 2 + 16 + 28)
+/* last number is a fudge--e.g., extra spaces, borders, etc. -----^  */
 
 static char *showHstr = "Show hidden files";
 static char *hideHstr = "Hide 'hidden' files";
@@ -164,6 +217,9 @@ static char *cmdMList[] = { "Change directory...\t^c",
 			    "Close window\t^c",
 			    MBSEP,
 			    "Show hidden files",     /* no equiv */
+#ifdef AUTO_EXPAND
+			    "Clear virtual directory",
+#endif
 			    "Select files...\t^f"
 			    };
 
@@ -208,6 +264,13 @@ typedef struct {  Window win, iconW;
 		  char   path[MAXPATHLEN+2];   /* '/' terminated */
 		} BROWINFO;
 
+
+/* keep track of last icon visible in each path */
+typedef struct IVIS IVIS;
+    struct IVIS { IVIS   *next;
+                  char   *name;
+                  int    icon;
+                };
 
 static Cursor   movecurs, copycurs, delcurs;
 static BROWINFO binfo[MAXBRWIN];
@@ -294,10 +357,16 @@ static void cp_file          PARM((struct stat *, int));
 static void cp_special       PARM((struct stat *, int));
 static void cp_fifo          PARM((struct stat *, int));
 
+#ifdef AUTO_EXPAND
+static int  stat2bf          PARM((u_int, char *));
+#else
 static int  stat2bf          PARM((u_int));
+#endif
 
 static int  selmatch         PARM((char *, char *));
 static int  selmatch1        PARM((char *, char *));
+static void recIconVisible   PARM((char *, int));
+static void restIconVisible  PARM((BROWINFO *));
 
 
 
@@ -511,9 +580,10 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
   bfIcons[BF_JFIF]=MakePix1(br->win,br_jfif_bits,br_jfif_width,br_jfif_height);
   bfIcons[BF_TIFF]=MakePix1(br->win,br_tiff_bits,br_tiff_width,br_tiff_height);
   bfIcons[BF_PDS] =MakePix1(br->win,br_pds_bits, br_pds_width, br_pds_height);
-
-  bfIcons[BF_COMPRESS]= MakePix1(br->win, br_cmpres_bits,
-				 br_cmpres_width, br_cmpres_height);
+  bfIcons[BF_COMPRESS] = MakePix1(br->win, br_cmpres_bits,
+				  br_cmpres_width, br_cmpres_height);
+  bfIcons[BF_BZIP2] = MakePix1(br->win, br_bzip2_bits,
+			       br_bzip2_width, br_bzip2_height);
 
   bfIcons[BF_PS]  =MakePix1(br->win,br_ps_bits,  br_ps_width,  br_ps_height);
   bfIcons[BF_IFF] =MakePix1(br->win,br_iff_bits, br_iff_width, br_iff_height);
@@ -524,6 +594,16 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
   bfIcons[BF_XPM] =MakePix1(br->win,br_xpm_bits, br_xpm_width, br_xpm_height);
   bfIcons[BF_XWD] =MakePix1(br->win,br_xwd_bits, br_xwd_width, br_xwd_height);
   bfIcons[BF_FITS]=MakePix1(br->win,br_fits_bits,br_fits_width,br_fits_height);
+  bfIcons[BF_PNG] =MakePix1(br->win,br_png_bits, br_png_width, br_png_height);
+  bfIcons[BF_ZX]  =MakePix1(br->win,br_zx_bits,  br_zx_width,  br_zx_height);
+  bfIcons[BF_PCD] =MakePix1(br->win,br_pcd_bits, br_pcd_width, br_pcd_height);
+  bfIcons[BF_MAG] =MakePix1(br->win,br_mag_bits, br_mag_width, br_mag_height);
+  bfIcons[BF_MAKI]=MakePix1(br->win,br_maki_bits,br_maki_width,br_maki_height);
+  bfIcons[BF_PIC] =MakePix1(br->win,br_pic_bits, br_pic_width, br_pic_height);
+  bfIcons[BF_PI]  =MakePix1(br->win,br_pi_bits,  br_pi_width,  br_pi_height);
+  bfIcons[BF_PIC2]=MakePix1(br->win,br_pic2_bits,br_pic2_width,br_pic2_height);
+  bfIcons[BF_MGCSFX] = MakePix1(br->win,br_mgcsfx_bits,
+                             br_mgcsfx_width,br_mgcsfx_height);
 
 
   /* check that they all got built */
@@ -698,6 +778,9 @@ void SetBrowseCursor(c)
   }
 }
 
+#ifdef VS_RESCMAP
+static int _IfTempOut=0;
+#endif
 
 /***************************************************************/
 void KillBrowseWindows()
@@ -730,7 +813,6 @@ int BrowseCheckEvent(xev, retP, doneP)
   return 0;
 }
 
-
 /***************************************************************/
 static int brChkEvent(br, xev)
      BROWINFO *br;
@@ -745,15 +827,32 @@ static int brChkEvent(br, xev)
 
   if (!hasBeenSized) return 0;  /* ignore evrythng until we get 1st Resize */
 
+
+#ifdef VS_RESCMAP
+  /* force change color map if have LocalCmap */
+  if (browPerfect && browCmap && (_IfTempOut==2)) {
+    int i;
+    XSetWindowAttributes xswa;
+
+    xswa.colormap = LocalCmap? LocalCmap : theCmap;
+    for (i=0; i<MAXBRWIN; ++i)
+      XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
+    XFlush(theDisp);
+    _IfTempOut=1;
+  }
+#endif
+
   if (xev->type == Expose) {
     int x,y,w,h;
     XExposeEvent *e = (XExposeEvent *) xev;
     x = e->x;  y = e->y;  w = e->width;  h = e->height;
 
     /* throw away excess redraws for 'dumb' windows */
-    if (e->count > 0 && (e->window == br->scrl.win)) {}
+    if (e->count > 0 && (e->window == br->scrl.win))
+      ;
 
-    else if (e->window == br->scrl.win) SCRedraw(&(br->scrl));
+    else if (e->window == br->scrl.win)
+      SCRedraw(&(br->scrl));
 
     else if (e->window == br->win || e->window == br->iconW) { /* smart wins */
       /* group individual expose rects into a single expose region */
@@ -806,13 +905,57 @@ static int brChkEvent(br, xev)
     int i,x,y;
     x = e->x;  y = e->y;
 
-    if (e->button == Button1) {
+#ifdef VS_RESCMAP
+    if (browCmap && browPerfect && (_IfTempOut!=0))
+      {
+	  XSetWindowAttributes  xswa;
+	  _IfTempOut--;
+	  xswa.colormap = browCmap;
+	  for(i=0;i<MAXBRWIN;i++)
+	    XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
+	  XFlush(theDisp);
+      }
+
+#endif
+
+  if (e->button == Button1) {
       if      (e->window == br->win)      clickBrow(br,x,y);
       else if (e->window == br->scrl.win) SCTrack(&(br->scrl),x,y);
       else if (e->window == br->iconW) {
 	i = clickIconWin(br, x,y,(unsigned long) e->time,
 			 (e->state&ControlMask) || (e->state&ShiftMask));
+      }
+      else rv = 0;
+    }
+    else if (e->button == Button4) {   /* note min vs. max, + vs. - */
+      /* scroll regardless of where we are in the browser window */
+      if (e->window == br->win ||
+	  e->window == br->scrl.win ||
+	  e->window == br->iconW)
+      {
+	SCRL *sp=&(br->scrl);
+	int  halfpage=MAX(1,sp->page/2); /* user resize to 1 line? */
 
+	if (sp->val > sp->min+halfpage)
+	  SCSetVal(sp,sp->val-halfpage);
+	else
+	  SCSetVal(sp,sp->min);
+      }
+      else rv = 0;
+    }
+    else if (e->button == Button5) {   /* note max vs. min, - vs. + */
+      /* scroll regardless of where we are in the browser window */
+      if (e->window == br->win ||
+	  e->window == br->scrl.win ||
+	  e->window == br->iconW)
+      {
+	SCRL *sp=&(br->scrl);
+	int  halfpage=MAX(1,sp->page/2); /* user resize to 1 line? */
+
+	if (sp->val < sp->max-halfpage)
+	  SCSetVal(sp,sp->val+halfpage);
+	else
+	  SCSetVal(sp,sp->max);
       }
       else rv = 0;
     }
@@ -1101,6 +1244,10 @@ static void doCmd(br, cmd)
   case BR_SELFILES: doSelFilesCmd(br);   break;
 
   case BR_RECURSUP: doRecurseCmd(br);    break;
+
+#ifdef AUTO_EXPAND
+  case BR_CLEARVD:  Vdsettle();          break;
+#endif
   }
 }
 
@@ -1250,6 +1397,18 @@ static void changedNumLit(br, sel, nostr)
   int i, allowtext;
 
   if (!nostr) setSelInfoStr(br, sel);
+#ifdef AUTO_EXPAND
+  if (Isvdir(br->path)) {
+    BTSetActive(&br->but[BR_DELETE],  0);
+    br->cmdMB.dim[BR_DELETE] = 1;
+
+    BTSetActive(&br->but[BR_RENAME],  0);
+    br->cmdMB.dim[BR_RENAME] = 1;
+
+    BTSetActive(&br->but[BR_MKDIR],  0);
+    br->cmdMB.dim[BR_MKDIR] = 1;
+  } else {
+#endif
   BTSetActive(&br->but[BR_DELETE],  br->numlit>0);
   br->cmdMB.dim[BR_DELETE] = !(br->numlit>0);
 
@@ -1258,6 +1417,11 @@ static void changedNumLit(br, sel, nostr)
 
   BTSetActive(&br->but[BR_GENICON], br->numlit>0);
   br->cmdMB.dim[BR_GENICON] = !(br->numlit>0);
+#ifdef AUTO_EXPAND
+  BTSetActive(&br->but[BR_MKDIR],  1);
+  br->cmdMB.dim[BR_MKDIR] = 0;
+  }
+#endif
 
   /* turn on 'text view' cmd if exactly one non-dir is lit */
   allowtext = 0;
@@ -1318,8 +1482,11 @@ static void setSelInfoStr(br, sel)
 	  struct stat st;
 
 	  sprintf(buf, "%s%s", br->path, bf->name);  /* build filename */
+#ifdef AUTO_EXPAND
+	  Dirtovd(buf);
+#endif
 	  if (stat(buf, &st) == 0) {
-	    sprintf(buf, "%s:  %ld bytes", bf->name, st.st_size);
+	    sprintf(buf, "%s:  %ld bytes", bf->name, (long)st.st_size);
 	    strcat(buf, buf1);
 	  }
 	}
@@ -1598,6 +1765,10 @@ static void makeIconVisible(br, num)
 {
   int sval, first, numvis;
 
+  /* if we know what path we have, remember last visible icon for this path */
+  if (br->path)
+    recIconVisible(br->path, num);
+
   /* if icon #i isn't visible, adjust scrollbar so it *is* */
 
   sval = br->scrl.val;
@@ -1649,29 +1820,14 @@ static void clickBrow(br, x,y)
   return;
 }
 
-
 /***************************************************************/
-static int clickIconWin(br, mx, my, mtime, multi)
-     BROWINFO *br;
-     int mx,my,multi;
-     unsigned long mtime;
+static int updateSel(br, sel, multi, mtime)
+  BROWINFO *br;
+  int sel, multi;
+  unsigned long mtime;
 {
-  /* returns '-1' normally, returns an index into bfList[] if the user
-     double-clicks an icon */
-
-  int       i,j, rv, sel, cpymode, dodel;
-  BROWINFO *destBr;
-  BFIL     *bf;
-  char      buf[256], *destFolderName;
-
-  rv = -1;     /* default return value */
-  if (!br->bfList || !br->bfLen) return rv;
-
-  destBr = br;  destFolderName = ".";
-
-  sel = mouseInWhichIcon(br, mx, my);
-
-  dodel = 0;
+  int i;
+  BFIL *bf;
 
   if (sel == -1) {  /* clicked on nothing */
     if (!multi) {   /* deselect all */
@@ -1728,11 +1884,12 @@ static int clickIconWin(br, mx, my, mtime, multi)
 
 
     /* see if we've double-clicked something */
-    if (sel==br->lastIconClicked && mtime-br->lastClickTime < DBLCLICKTIME) {
+    if (mtime &&
+        sel==br->lastIconClicked && mtime-br->lastClickTime < DBLCLICKTIME) {
       br->lastIconClicked = -1;    /* YES */
 
       doubleClick(br, sel);
-      return rv;
+      return -1;
     }
 
     else {
@@ -1741,9 +1898,36 @@ static int clickIconWin(br, mx, my, mtime, multi)
     }
   }
 
-
   changedNumLit(br, -1, 0);
+  return 0;
+}
 
+
+/***************************************************************/
+static int clickIconWin(br, mx, my, mtime, multi)
+     BROWINFO *br;
+     int mx,my,multi;
+     unsigned long mtime;
+{
+  /* returns '-1' normally, returns an index into bfList[] if the user
+     double-clicks an icon */
+
+  int       i,j, sel, cpymode, dodel;
+  BROWINFO *destBr;
+  BFIL     *bf;
+  char      buf[256], *destFolderName;
+
+  if (!br->bfList || !br->bfLen) return -1;
+
+  destBr = br;  destFolderName = ".";
+
+  sel = mouseInWhichIcon(br, mx, my);
+  dodel = 0;
+
+  recIconVisible(br->path, sel);
+
+  if (updateSel(br, sel, multi, mtime))
+    return -1;
 
 
   {    /* track mouse until button1 is released */
@@ -2098,7 +2282,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
     }
   }      /* end of 'tracking' sub-function */
 
-  return rv;
+  return -1;
 }
 
 /*******************************************/
@@ -2164,15 +2348,35 @@ static void doubleClick(br, sel)
     else sprintf(buf, "%s%s", br->path, br->bfList[sel].name);
 #endif
 
+#ifdef AUTO_EXPAND
+    if (Chvdir(buf)) {
+#else
     if (chdir(buf)) {
+#endif
       char str[512];
       sprintf(str,"Unable to cd to '%s'\n", br->bfList[sel].name);
       setBrowStr(br, str);
       XBell(theDisp, 50);
     }
     else {
+#ifdef AUTO_EXPAND
+      if (Isvdir(buf)) {
+	BTSetActive(&br->but[BR_DELETE],  0);
+	br->cmdMB.dim[BR_DELETE] = 1;
+
+	BTSetActive(&br->but[BR_RENAME],  0);
+	br->cmdMB.dim[BR_RENAME] = 1;
+
+	BTSetActive(&br->but[BR_MKDIR],  0);
+	br->cmdMB.dim[BR_MKDIR] = 1;
+      } else {
+	BTSetActive(&br->but[BR_MKDIR],  1);
+	br->cmdMB.dim[BR_MKDIR] = 0;
+      }
+#endif
       scanDir(br);
       SCSetVal(&(br->scrl), 0);  /* reset to top on a chdir */
+      restIconVisible(br);
     }
   }
 
@@ -2192,6 +2396,28 @@ static void doubleClick(br, sel)
       *event_retP = THISNEXT;
     }
     else { *event_retP = LOADPIC;  SetDirFName(buf);  }
+
+#ifdef VS_RESCMAP
+    /* Change Colormap for browser */
+    if (browPerfect && browCmap)
+      {
+	  int i;
+	  XSetWindowAttributes  xswa;
+	  if(LocalCmap)
+	    {
+		xswa.colormap = LocalCmap;
+		_IfTempOut=2;
+	    }
+	  else
+	    {
+		xswa.colormap = theCmap;
+		_IfTempOut=2;
+	    }
+	  for(i=0;i<MAXBRWIN;i++)
+	    XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
+	  XFlush(theDisp);
+      }
+#endif
 
     *event_doneP = 1;     /* make MainLoop load image */
   }
@@ -2347,6 +2573,9 @@ static void keyIconWin(br, kevt)
 
 	  /* try to open this file */
 	  sprintf(foo, "%s%s", br->path, br->bfList[i].name);
+#ifdef AUTO_EXPAND
+	Dirtovd(foo);
+#endif
 	  for (j=0; j<numnames && strcmp(namelist[j],foo); j++);
 	  if (j<numnames) {
 	    curname = nList.selected = j;
@@ -2362,6 +2591,9 @@ static void keyIconWin(br, kevt)
       else {          /* not SPACE, or SPACE and lit=1 and not shift */
 	for (i=0; i<br->bfLen && !br->bfList[i].lit; i++);  /* find lit one */
 	sprintf(fname, "%s%s", br->path, br->bfList[i].name);
+#ifdef AUTO_EXPAND
+	Dirtovd(fname);
+#endif
 	viewsel = !(strcmp(fname, fullfname));
 
 	if (viewsel) {
@@ -2553,7 +2785,11 @@ static void changedBrDirMB(br, sel)
     }
 #endif
 
+#ifdef AUTO_EXPAND
+    if (Chvdir(tmppath)) {
+#else
     if (chdir(tmppath)) {
+#endif
       char str[512];
       sprintf(str,"Unable to cd to '%s'\n", tmppath);
       MBRedraw(&(br->dirMB));
@@ -2561,8 +2797,24 @@ static void changedBrDirMB(br, sel)
       XBell(theDisp, 50);
     }
     else {
+#ifdef AUTO_EXPAND
+      if (Isvdir(tmppath)) {
+	BTSetActive(&br->but[BR_DELETE],  0);
+	br->cmdMB.dim[BR_DELETE] = 1;
+
+	BTSetActive(&br->but[BR_RENAME],  0);
+	br->cmdMB.dim[BR_RENAME] = 1;
+
+	BTSetActive(&br->but[BR_MKDIR],  0);
+	br->cmdMB.dim[BR_MKDIR] = 1;
+      } else {
+	BTSetActive(&br->but[BR_MKDIR],  1);
+	br->cmdMB.dim[BR_MKDIR] = 0;
+      }
+#endif
       scanDir(br);
       SCSetVal(&br->scrl, 0);  /* reset to top of window on a chdir */
+      restIconVisible(br);
     }
   }
 }
@@ -2581,7 +2833,11 @@ static int cdBrow(br)
   if ((strlen(br->path) > (size_t) 2) && br->path[strlen(br->path)-1] == '/')
     br->path[strlen(br->path)-1] = '\0';
 
+#ifdef AUTO_EXPAND
+  rv = Chvdir(br->path);
+#else
   rv = chdir(br->path);
+#endif
   if (rv) {
     char str[512];
     sprintf(str, "Unable to cd to '%s'\n", br->path);
@@ -2589,6 +2845,23 @@ static int cdBrow(br)
     XBell(theDisp, 50);
   }
 
+#ifdef AUTO_EXPAND
+  if (Isvdir(br->path)) {
+    BTSetActive(&br->but[BR_DELETE],  0);
+    br->cmdMB.dim[BR_DELETE] = 1;
+
+    BTSetActive(&br->but[BR_RENAME],  0);
+    br->cmdMB.dim[BR_RENAME] = 1;
+
+    BTSetActive(&br->but[BR_MKDIR],  0);
+    br->cmdMB.dim[BR_MKDIR] = 1;
+  } else {
+    BTSetActive(&br->but[BR_MKDIR],  1);
+    br->cmdMB.dim[BR_MKDIR] = 0;
+  }
+#endif
+
+  restIconVisible(br);
   strcat(br->path, "/");   /* put trailing '/' back on */
   return rv;
 }
@@ -2615,8 +2888,13 @@ static void copyDirInfo(srcbr, dstbr)
     strcpy(dstbr->mblist[i], srcbr->mblist[i]);
   }
 
-  dstbr->dirMB.list  = srcbr->mblist;
+#if 0
+  dstbr->dirMB.list  = srcbr->mblist;  /* original bug..? */
   dstbr->dirMB.nlist = srcbr->ndirs;
+#else
+  dstbr->dirMB.list  = dstbr->mblist;  /* fixed by        */
+  dstbr->dirMB.nlist = dstbr->ndirs;   /*   jp-extension. */
+#endif
 
   XClearArea(theDisp, dstbr->dirMB.win, dstbr->dirMB.x, dstbr->dirMB.y,
 	     dstbr->dirMB.w+3, dstbr->dirMB.h+3, False);
@@ -2974,7 +3252,11 @@ static void scanFile(br, bf, name)
 
 
   if (stat(bf->name, &st)==0) {
+#ifdef AUTO_EXPAND
+    bf->ftype = stat2bf((u_int) st.st_mode , bf->name);
+#else
     bf->ftype = stat2bf((u_int) st.st_mode);
+#endif
     if (bf->ftype == BF_FILE && (st.st_mode & 0111)) bf->ftype = BF_EXE;
 
     switch (bf->ftype) {
@@ -3006,6 +3288,7 @@ static void scanFile(br, bf, name)
     case RFT_XBM:      bf->ftype = BF_XBM;      break;
     case RFT_SUNRAS:   bf->ftype = BF_SUNRAS;   break;
     case RFT_BMP:      bf->ftype = BF_BMP;      break;
+    case RFT_WBMP:     bf->ftype = BF_BMP;      break;
     case RFT_UTAHRLE:  bf->ftype = BF_UTAHRLE;  break;
     case RFT_IRIS:     bf->ftype = BF_IRIS;     break;
     case RFT_PCX:      bf->ftype = BF_PCX;      break;
@@ -3013,12 +3296,22 @@ static void scanFile(br, bf, name)
     case RFT_TIFF:     bf->ftype = BF_TIFF;     break;
     case RFT_PDSVICAR: bf->ftype = BF_PDS;      break;
     case RFT_COMPRESS: bf->ftype = BF_COMPRESS; break;
+    case RFT_BZIP2:    bf->ftype = BF_BZIP2;    break;
     case RFT_PS:       bf->ftype = BF_PS;       break;
     case RFT_IFF:      bf->ftype = BF_IFF;      break;
     case RFT_TARGA:    bf->ftype = BF_TARGA;    break;
     case RFT_XPM:      bf->ftype = BF_XPM;      break;
     case RFT_XWD:      bf->ftype = BF_XWD;      break;
     case RFT_FITS:     bf->ftype = BF_FITS;     break;
+    case RFT_PNG:      bf->ftype = BF_PNG;      break;
+    case RFT_ZX:       bf->ftype = BF_ZX;       break;	/* [JCE] */
+    case RFT_PCD:      bf->ftype = BF_PCD;      break;
+    case RFT_MAG:      bf->ftype = BF_MAG;      break;
+    case RFT_MAKI:     bf->ftype = BF_MAKI;     break;
+    case RFT_PIC:      bf->ftype = BF_PIC;      break;
+    case RFT_PI:       bf->ftype = BF_PI;       break;
+    case RFT_PIC2:     bf->ftype = BF_PIC2;     break;
+    case RFT_MGCSFX:   bf->ftype = BF_MGCSFX;   break;
     }
   }
 }
@@ -3405,7 +3698,7 @@ static void genIcon(br, bf)
   double  wexpand,hexpand;
   int     iwide, ihigh;
   byte   *icon24, *icon8;
-  char    str[256], str1[256], *readname, uncompname[128];
+  char    str[256], str1[256], readname[128], uncompname[128];
   char    basefname[128], *uncName;
 
 
@@ -3414,7 +3707,7 @@ static void genIcon(br, bf)
   basefname[0] = '\0';
   pinfo.pic = (byte *) NULL;
   pinfo.comment = (char *) NULL;
-  readname = bf->name;
+  strncpy(readname, bf->name, sizeof(readname) - 1);
 
   /* free any old info in 'bf' */
   if (bf->imginfo) free          (bf->imginfo);
@@ -3431,7 +3724,7 @@ static void genIcon(br, bf)
 
   filetype = ReadFileType(bf->name);
 
-  if (filetype == RFT_COMPRESS) {
+  if ((filetype == RFT_COMPRESS) || (filetype == RFT_BZIP2)) {
 #if (defined(VMS) && !defined(GUNZIP))
     /* VMS decompress doesn't like the file to have a trailing .Z in fname
        however, GUnZip is OK with it, which we are calling UnCompress */
@@ -3442,9 +3735,9 @@ static void genIcon(br, bf)
     uncName = bf->name;
 #endif
 
-    if (UncompressFile(uncName, uncompname)) {
+    if (UncompressFile(uncName, uncompname, filetype)) {
       filetype = ReadFileType(uncompname);
-      readname = uncompname;
+      strncpy(readname, uncompname, sizeof(readname) - 1);
     }
     else {
       sprintf(str, "Couldn't uncompress file '%s'", bf->name);
@@ -3452,6 +3745,56 @@ static void genIcon(br, bf)
       bf->ftype = BF_ERROR;
     }
   }
+
+#ifdef MACBINARY
+  if (handlemacb && macb_file == True && bf->ftype != BF_ERROR) {
+    if (RemoveMacbinary(readname, uncompname)) {
+      if (strcmp(readname, bf->name)!=0) unlink(readname);
+      strncpy(readname, uncompname, sizeof(readname) - 1);
+    }
+    else {
+      sprintf(str, "Unable to remove a InfoFile header form '%s'.", bf->name);
+      setBrowStr(br, str);
+      bf->ftype = BF_ERROR;
+    }
+  }
+#endif
+
+#ifdef HAVE_MGCSFX_AUTO
+  if (bf->ftype != BF_ERROR) {
+    if(filetype == RFT_MGCSFX){
+      char tmpname[128];
+      char *icom;
+
+      if((icom = mgcsfx_auto_input_com(bf->name)) != NULL){
+	sprintf(tmpname, "%s/xvmsautoXXXXXX", tmpdir);
+#ifdef USE_MKSTEMP
+	close(mkstemp(tmpname));
+#else
+	mktemp(tmpname);
+#endif
+	SetISTR(ISTR_INFO, "Converting to known format by MgcSfx auto...");
+	sprintf(str,"%s >%s", icom, tmpname);
+      }else goto ms_auto_no;
+
+#ifndef VMS
+      if (system(str))
+#else
+      if (!system(str))
+#endif
+      {
+        sprintf(str, "Unable to convert '%s' by MgcSfx auto.", bf->name);
+        setBrowStr(br, str);
+        bf->ftype = BF_ERROR;
+      } else {
+        filetype = ReadFileType(tmpname);
+        if (strcmp(readname, bf->name)!=0) unlink(readname);
+        strncpy(readname, tmpname, sizeof(readname) - 1);
+      }
+    }
+  }
+ms_auto_no:
+#endif /* HAVE_MGCSFX_AUTO */
 
   /* get rid of comments.  don't need 'em */
   if (pinfo.comment) free(pinfo.comment);  pinfo.comment = (char *) NULL;
@@ -3470,6 +3813,9 @@ static void genIcon(br, bf)
   else {
     /* otherwise it's a known filetype... do the *hard* part now... */
 
+#ifdef VS_ADJUST
+    normaspect = defaspect;
+#endif
     i = ReadPicFile(readname, filetype, &pinfo, 1);
     KillPageFiles(pinfo.pagebname, pinfo.numpages);
 
@@ -3489,7 +3835,7 @@ static void genIcon(br, bf)
   }
 
   /* if we made an uncompressed file, we can rm it now */
-  if (readname != bf->name) unlink(readname);
+  if (strcmp(readname, bf->name)!=0) unlink(readname);
 
 
   /* at this point either BF_ERROR, BF_UNKNOWN, BF_EXE or pic */
@@ -3507,16 +3853,30 @@ static void genIcon(br, bf)
 
   /* compute size of icon  (iwide,ihigh) */
 
+#ifdef VS_ADJUST
+  if (!vsadjust) normaspect = 1;
+
+  wexpand = (double) (pinfo.w * normaspect) / (double) ISIZE_WIDE;
+#else
   wexpand = (double) pinfo.w / (double) ISIZE_WIDE;
+#endif /* VS_ADJUST */
   hexpand = (double) pinfo.h / (double) ISIZE_HIGH;
 
   if (wexpand >= 1.0 || hexpand >= 1.0) {   /* don't expand small icons */
     if (wexpand>hexpand) {
+#ifdef VS_ADJUST
+      iwide = (int) ((pinfo.w * normaspect) / wexpand + 0.5);
+#else
       iwide = (int) (pinfo.w / wexpand + 0.5);
+#endif
       ihigh = (int) (pinfo.h / wexpand + 0.5);
     }
     else {
+#ifdef VS_ADJUST
+      iwide = (int) ((pinfo.w * normaspect) / hexpand + 0.5);
+#else
       iwide = (int) (pinfo.w / hexpand + 0.5);
+#endif
       ihigh = (int) (pinfo.h / hexpand + 0.5);
     }
   }
@@ -3566,6 +3926,15 @@ static void genIcon(br, bf)
   case RFT_XPM:      strcat(str,"XPM file");              break;
   case RFT_XWD:      strcat(str,"XWD file");              break;
   case RFT_FITS:     strcat(str,"FITS file");             break;
+  case RFT_PNG:      strcat(str,"PNG file");              break;
+  case RFT_ZX:       strcat(str,"Spectrum SCREEN$");      break; /* [JCE] */
+  case RFT_PCD:      strcat(str,"PhotoCD file");          break;
+  case RFT_MAG:      strcat(str,"MAG file");              break;
+  case RFT_MAKI:     strcat(str,"MAKI file");             break;
+  case RFT_PIC:      strcat(str,"PIC file");              break;
+  case RFT_PI:       strcat(str,"PI file");               break;
+  case RFT_PIC2:     strcat(str,"PIC2 file");             break;
+  case RFT_MGCSFX:   strcat(str,"Magic Suffix file");     break;
   default:           strcat(str,"file of unknown type");  break;
   }
 
@@ -3668,6 +4037,10 @@ static void loadThumbFile(br, bf)
   info = NULL;  icon8 = NULL;  builtin = 0;
 
   sprintf(thFname, "%s%s/%s", br->path, THUMBDIR, bf->name);
+
+#ifdef AUTO_EXPAND
+  Dirtovd(thFname);
+#endif
 
   fp = fopen(thFname, "r");
   if (!fp) return;            /* nope, it doesn't have one */
@@ -3784,6 +4157,11 @@ static void writeThumbFile(br, bf, icon8, w, h, info)
 
   sprintf(thFname, "%s%s/%s", br->path, THUMBDIR, bf->name);
 
+#ifdef AUTO_EXPAND
+  Dirtovd(thFname);
+#endif
+
+  unlink(thFname);  /* just in case there's already an unwritable one */
   fp = fopen(thFname, "w");
   if (!fp) {
     sprintf(buf, "Can't create thumbnail file '%s':  %s", thFname,
@@ -3848,15 +4226,30 @@ static void makeThumbDir(br)
 
   sprintf(thFname, "%s%s", br->path, THUMBDIRNAME);
 
+#ifdef AUTO_EXPAND
+  Dirtovd(thFname);
+#endif
+
   i = stat(thFname, &st);
   if (i) {                      /* failed, let's create it */
     sprintf(thFname, "%s.", br->path);
+#ifdef AUTO_EXPAND
+  Dirtovd(thFname);
+#endif
     i = stat(thFname, &st);     /* get permissions of parent dir */
     if (!i) perm = st.st_mode & 07777;
        else perm = 0755;
 
     sprintf(thFname, "%s%s", br->path, THUMBDIRNAME);
+#ifdef AUTO_EXPAND
+    Dirtovd(thFname);
+#  ifdef VIRTUAL_TD
+    if (mkdir(thFname, (mode_t) perm) < 0)
+      Mkvdir_force(thFname);
+#  else
     mkdir(thFname, (mode_t) perm);
+#  endif
+#endif
   }
 }
 
@@ -3898,7 +4291,7 @@ static void updateIcons(br)
   for (i=0, bf=br->bfList; i<br->bfLen; i++, bf++) {
     if (bf->ftype <= BF_FILE || bf->ftype >= BF_ERROR || bf->ftype==BF_EXE) {
 
-      /* ie, not a 'special' file */
+      /* i.e., not a 'special' file */
 
       int  s1, s2;
       char thfname[256];
@@ -3912,10 +4305,9 @@ static void updateIcons(br)
       sprintf(thfname, "%s/%s", THUMBDIR, bf->name);
       s2 = stat(thfname, &thumbst);
 
-      if (s1 || s2 || filest.st_mtime > thumbst.st_mtime ||
-	              filest.st_ctime > thumbst.st_ctime) {
+      if (s1 || s2 || filest.st_mtime > thumbst.st_mtime) {
 	/* either stat'ing the file or the thumbfile failed, or
-	   both stat's succeeded and the file has a newer mod or creation
+	   both stat's succeeded and the file has a newer mod
 	   time than the thumbnail file */
 
 	makeIconVisible(br, i);
@@ -3927,8 +4319,12 @@ static void updateIcons(br)
 	  iconsBuilt++;
 	  if (DEBUG)
 	    fprintf(stderr,"icon made:fname='%s' thfname='%s' %d,%d,%ld,%ld\n",
-		    bf->name, thfname, s1,s2,filest.st_mtime,thumbst.st_mtime);
+		    bf->name, thfname, s1, s2,
+		    (long)filest.st_mtime, (long)thumbst.st_mtime);
 	}
+      } else if (filest.st_ctime > thumbst.st_ctime) {
+        /* update protections */
+        chmod(thfname, (mode_t) (filest.st_mode & 07777));
       }
     }
     statcount++;
@@ -3963,7 +4359,11 @@ static void updateIcons(br)
       sprintf(thfname, "%s/%s", THUMBDIR, dp->d_name);
       if (stat(thfname, &thumbst)==0) {  /* success */
 	int tmp;
+#ifdef AUTO_EXPAND
+	tmp  = stat2bf((u_int) thumbst.st_mode , thfname);
+#else
 	tmp  = stat2bf((u_int) thumbst.st_mode);
+#endif
 
 	if (tmp == BF_FILE) {  /* a plain file */
 	  /* see if this thumbfile has an associated pic file */
@@ -4041,6 +4441,15 @@ static void doRenameCmd(br)
   char buf[128], txt[256], *origname, txt1[256];
   static char *labels[] = { "\nOk", "\033Cancel" };
   struct stat st;
+
+#ifdef AUTO_EXPAND
+  if (Isvdir(br->path)) {
+    sprintf(buf,"Sorry, you can't rename file in the virtual directory, '%s'",
+	    br->path);
+    ErrPopUp(buf, "\nBummer!");
+    return;
+  }
+#endif
 
   if (cdBrow(br)) return;
 
@@ -4129,6 +4538,15 @@ static void doMkdirCmd(br)
   static char *labels[] = { "\nOk", "\033Cancel" };
   struct stat  st;
 
+#ifdef AUTO_EXPAND
+  if (Isvdir(br->path)) {
+    sprintf(buf,"Sorry, you can't mkdir in the virtual directory, '%s'",
+	    br->path);
+    ErrPopUp(buf, "\nBummer!");
+    return;
+  }
+#endif
+
   if (cdBrow(br)) return;
 
   buf[0] = '\0';
@@ -4197,14 +4615,34 @@ static void doChdirCmd(br)
     if (cdBrow(br)) return;     /* prints its own error message */
   }
 
+#ifdef AUTO_EXPAND
+  if (Chvdir(buf)) {
+#else
   if (chdir(buf)) {
+#endif
     sprintf(str,"Unable to cd to '%s'\n", buf);
     setBrowStr(br, str);
     XBell(theDisp, 50);
   }
   else {
+#ifdef AUTO_EXPAND
+      if (Isvdir(buf)) {
+	BTSetActive(&br->but[BR_DELETE],  0);
+	br->cmdMB.dim[BR_DELETE] = 1;
+
+	BTSetActive(&br->but[BR_RENAME],  0);
+	br->cmdMB.dim[BR_RENAME] = 1;
+
+	BTSetActive(&br->but[BR_MKDIR],  0);
+	br->cmdMB.dim[BR_MKDIR] = 1;
+      } else {
+	BTSetActive(&br->but[BR_MKDIR],  1);
+	br->cmdMB.dim[BR_MKDIR] = 0;
+      }
+#endif
     scanDir(br);
     SCSetVal(&(br->scrl), 0);	/* reset to top on a chdir */
+    restIconVisible(br);
   }
 }
 
@@ -4229,6 +4667,15 @@ static void doDeleteCmd(br)
   char   buf[512];
   static char *yesno[]  = { "\004Delete", "\033Cancel" };
 
+#ifdef AUTO_EXPAND
+  if (Isvdir(br->path)) {
+    sprintf(buf,"Sorry, you can't delete file at the virtual directory, '%s'",
+	    br->path);
+    ErrPopUp(buf, "\nBummer!");
+    return;
+  }
+#endif
+
   if (!br->bfLen || !br->bfList || !br->numlit) return;
 
   if (cdBrow(br)) return;     /* can't cd to this directory.  screw it! */
@@ -4251,7 +4698,11 @@ static void doDeleteCmd(br)
   for (i=0, bf=br->bfList; i<br->bfLen; i++,bf++) {
     if (bf->lit) {
       if (firstdel == -1) firstdel = i;
-      if (bf->ftype == BF_DIR) numdirs++;
+      if (bf->ftype == BF_DIR
+#ifdef AUTO_EXPAND
+	  && (!Isarchive(bf->name))
+#endif
+			     ) numdirs++;
       else numfiles++;
     }
   }
@@ -4265,7 +4716,12 @@ static void doDeleteCmd(br)
     slen = strlen(buf);
 
     for (i=0, bf=br->bfList;  i<br->bfLen;  i++,bf++) {
+#ifdef AUTO_EXPAND
+      if (bf->lit && (bf->ftype != BF_DIR || Isarchive(bf->name))) {
+#else
       if (bf->lit && bf->ftype != BF_DIR) {
+#endif
+
 	if ( (slen + strlen(bf->name) + 1) > 256) {
 	  strcat(buf,"...");
 	  break;
@@ -4277,7 +4733,7 @@ static void doDeleteCmd(br)
       }
     }
 
-    i = PopUp(buf, yesno, 2);
+    i = PopUp(buf, yesno, COUNT(yesno));
     if (i) return;              /* cancelled */
   }
 
@@ -4290,7 +4746,11 @@ static void doDeleteCmd(br)
     slen = strlen(buf);
 
     for (i=0, bf=br->bfList;  i<br->bfLen;  i++,bf++) {
+#ifdef AUTO_EXPAND
+      if (bf->lit && (bf->ftype == BF_DIR || !Isarchive(bf->name))) {
+#else
       if (bf->lit && bf->ftype == BF_DIR) {
+#endif
 	if ( (slen + strlen(bf->name) + 1) > 256) {
 	  strcat(buf,"...");
 	  break;
@@ -4302,7 +4762,7 @@ static void doDeleteCmd(br)
       }
     }
 
-    i = PopUp(buf, yesno, 2);
+    i = PopUp(buf, yesno, COUNT(yesno));
     if (i) return;              /* cancelled */
   }
 
@@ -4311,7 +4771,11 @@ static void doDeleteCmd(br)
 
   for (i=0, bf=br->bfList;  i<br->bfLen;  i++,bf++) {
     if (bf->lit) {
-      if (bf->ftype == BF_DIR) rm_dir (br, bf->name);
+      if (bf->ftype == BF_DIR
+#ifdef AUTO_EXPAND
+	  && !Isarchive(bf->name)
+#endif
+			     ) rm_dir (br, bf->name);
                           else rm_file(br, bf->name);
     }
   }
@@ -4440,7 +4904,11 @@ static void recurseUpdate(br, subdir)
   xv_getwd(orgDir, sizeof(orgDir));
 
   sprintf(curDir, "%s%s", br->path, subdir);
+#ifdef AUTO_EXPAND
+  if (Chvdir(curDir)) {
+#else
   if (chdir(curDir)) {
+#endif
     char str[512];
     sprintf(str, "Unable to cd to '%s'\n", curDir);
     setBrowStr(br, str);
@@ -4452,14 +4920,24 @@ static void recurseUpdate(br, subdir)
   /* have we looped? */
   for (i=0; i<dirStackLen && strcmp(curDir, dirStack[i]); i++);
   if (i<dirStackLen) {   /* YES */
+#ifdef AUTO_EXPAND
+    Chvdir(orgDir);
+#else
     chdir(orgDir);
+#endif
+    restIconVisible(br);
     return;
   }
 
   sp = (char *) malloc((size_t) strlen(curDir) + 1);
   if (!sp) {
     setBrowStr(br, "malloc() error in recurseUpdate()\n");
+#ifdef AUTO_EXPAND
+    Chvdir(orgDir);
+#else
     chdir(orgDir);
+#endif
+    restIconVisible(br);
     return;
   }
 
@@ -4494,7 +4972,12 @@ static void recurseUpdate(br, subdir)
 
   xv_getwd(curDir, sizeof(curDir));
   if (strcmp(orgDir, curDir)) {   /* change back to orgdir */
+#ifdef AUTO_EXPAND
+    Chvdir(orgDir);
+#else
     chdir(orgDir);
+#endif
+    restIconVisible(br);
     scanDir(br);
   }
 }
@@ -4517,6 +5000,13 @@ static void rm_file(br, name)
     sprintf(buf, "rm %s: %s", name, ERRSTR(errno));
     setBrowStr(br, buf);
   }
+
+#ifdef AUTO_EXPAND
+  if (Rmvdir(name)) {
+    sprintf(buf, "fail to remove virturl directory: %s", name);
+    setBrowStr(br, buf);
+  }
+#endif
 
   /* try to delete a thumbnail file, as well.  ignore errors */
   strcpy(buf1, name);          /* tmp1 = leading path of name */
@@ -4586,7 +5076,14 @@ static void rm_dir1(br)
 	goto done;
       }
 
-      if (stat2bf((u_int) st.st_mode) == BF_DIR) {  /* skip, for now */
+#ifdef AUTO_EXPAND
+      if ((stat2bf((u_int) st.st_mode , rmdirPath) == BF_DIR)
+	  && !Isarchive(rmdirPath))                /* skip, for now */
+#else
+
+      if (stat2bf((u_int) st.st_mode) == BF_DIR)   /* skip, for now */
+#endif
+      {
 	rmdirPath[oldpathlen] = '\0';
 	continue;   /* don't remove from list */
       }
@@ -4639,9 +5136,9 @@ static void rm_dir1(br)
 
 static int overwrite;
 #define OWRT_ASK    0
-#define OWRT_NOASK  1
-#define OWRT_CANCEL 2
-
+#define OWRT_ALWAYS 1
+#define OWRT_NEVER  2
+#define OWRT_CANCEL 3
 
 /*******************************************/
 static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
@@ -4676,11 +5173,26 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
   }
   else if (strcmp(dstdir,".")!=0) sprintf(dstp, "%s%s/", dstpath, dstdir);
 
+#ifdef AUTO_EXPAND
+  if (Isvdir(dstp)) {
+    sprintf(buf,"Sorry, you can't %s to the virtual directory, '%s'",
+	    cpymode ? "copy" : "move", dstp);
+    ErrPopUp(buf, "\nBummer!");
+    SetCursors(-1);
+    return;
+  }
+  if (Isvdir(srcpath))
+      cpymode = 1;
+#endif
+
 
 
   /* if there is a thumbnail directory in 'srcpath', make one for dstpath */
   sprintf(src,"%s%s", srcpath, THUMBDIR);
   dothumbs = 0;
+#ifdef AUTO_EXPAND
+  Dirtovd(src);
+#endif
   if (stat(src, &st)==0) {
     sprintf(dst,"%s%s", dstp, THUMBDIR);
     mkdir(dst, st.st_mode & 07777);
@@ -4710,6 +5222,14 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
 
     if (overwrite == OWRT_CANCEL) break;         /* abort move */
     if (j==1) fail++;
+
+#ifdef AUTO_EXPAND
+    if (!cpymode && j==0)
+      if (Movevdir(src,dst)) {
+	sprintf(buf, "fail to move virturl directory: %s", names[i]);
+	setBrowStr(srcBr, buf);
+      }
+#endif
 
     if (dothumbs && j==0) {
       sprintf(src,"%s%s/%s", srcpath, THUMBDIR, names[i]);
@@ -4745,6 +5265,15 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
     DIRDeletedFile(src);
     sprintf(src, "%s%s/bozo", dstp, THUMBDIR);
     DIRCreatedFile(src);
+  }
+
+
+  if (!cpymode) {
+    /* clear all lit files in the source folder (as they've been moved)
+       note:  this won't be the optimal behavior if any files failed to
+       move, but screw it, that's not going to happen too often... */
+    for (i=0; i<srcBr->bfLen; i++) srcBr->bfList[i].lit = 0;
+    srcBr->numlit = 0;
   }
 
 
@@ -4793,7 +5322,51 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
   SetCursors(-1);
 }
 
+static int recursive_remove(dir)
+     char *dir;
+{
+  DIR *dp = NULL;
+  struct dirent *di;
+  char name[MAXPATHLEN+1];
 
+  strncpy(name, dir, MAXPATHLEN);
+  name[MAXPATHLEN] = 0;
+
+  if (name[strlen(name) - 1] == '/')
+    name[strlen(name) - 1] = 0;
+
+  if ((dp = opendir(name)) == NULL)
+    goto err;
+
+  while ((di = readdir(dp)) != NULL) {
+    char buf[MAXPATHLEN+1];
+    struct stat st;
+
+    if (!strcmp(di->d_name, ".") || !strcmp(di->d_name, ".."))
+      continue;
+
+    snprintf(buf, MAXPATHLEN, "%s/%s", name, di->d_name);
+
+    if (stat(buf, &st) < 0)
+      continue;
+
+    if (S_ISDIR(st.st_mode)) {
+      if (recursive_remove(buf) < 0)
+	goto err;
+    } else
+      unlink(buf);
+  }
+
+  if (rmdir(name) < 0)
+    goto err;
+
+  closedir(dp);
+  return 0;
+
+err:
+  if (dp) closedir(dp);
+  return -1;
+}
 
 /*************************************************/
 static int moveFile(src,dst)
@@ -4811,31 +5384,45 @@ static int moveFile(src,dst)
   int         i, srcdir, dstdir;
   struct stat st;
   char        buf[512];
-  static char  *owbuts[4]  = { "\nOk", "dDon't ask", "nNo", "\033Cancel" };
+  static char  *owbuts[]  = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
 
   if (DEBUG) fprintf(stderr,"moveFile %s %s\n", src, dst);
 
+#ifdef AUTO_EXPAND
+  Dirtosubst(src);
+#endif
+
   if (stat(src, &st)) return 0;    /* src doesn't exist, it would seem */
+#ifdef AUTO_EXPAND
+  srcdir = (stat2bf((u_int) st.st_mode , src) == BF_DIR);
+#else
   srcdir = (stat2bf((u_int) st.st_mode) == BF_DIR);
+#endif
 
   /* see if destination exists */
+
   if (stat(dst, &st)==0) {
+    if (overwrite==OWRT_NEVER) return -1;
+#ifdef AUTO_EXPAND
+    dstdir = (stat2bf((u_int) st.st_mode , dst) == BF_DIR);
+#else
     dstdir = (stat2bf((u_int) st.st_mode) == BF_DIR);
+#endif
 
     if (overwrite==OWRT_ASK) {
-      sprintf(buf, "%s '%s' exists.\n\nOverwrite?",
+      snprintf(buf, sizeof(buf), "%s '%s' exists.\n\nOverwrite?",
 	      dstdir ? "Directory" : "File", dst);
-      i = PopUp(buf, owbuts, 4);
-
-      if      (i==1) overwrite = OWRT_NOASK;
-      else if (i==2) return -1;
-      else if (i==3) { overwrite = OWRT_CANCEL;  return 1; }
+      switch (PopUp(buf, owbuts, COUNT(owbuts))) {
+	case 1: overwrite = OWRT_ALWAYS; break;
+	case 2: return -1;
+	case 3: overwrite = OWRT_NEVER; return -1;
+	case 4: overwrite = OWRT_CANCEL;  return 1;
+      }
     }
 
     if (dstdir) {
 #ifndef VMS  /* we don't delete directories in VMS */
-      sprintf(buf, "rm -rf %s", dst);
-      if (system(buf)) {     /* okay, so it's cheating... */
+      if (recursive_remove(dst)) {   /* okay, so it's cheating... */
 	SetISTR(ISTR_WARNING, "Unable to remove directory %s", dst);
 	return 1;
       }
@@ -4858,9 +5445,8 @@ static int moveFile(src,dst)
   if (i == 0) {    /* copied okay, kill the original */
     if (srcdir) {
 #ifndef VMS   /* we don't delete directories in VMS */
-      sprintf(buf, "rm -rf %s", src);
-      if (system(buf)) {     /* okay, so it's cheating... */
-	SetISTR(ISTR_WARNING, "Unable to remove directory %s", dst);
+      if (recursive_remove(src)) {   /* okay, so it's cheating... */
+	SetISTR(ISTR_WARNING, "Unable to remove directory %s", src);
 	return 1;
       }
 #endif /* VMS */
@@ -4906,38 +5492,51 @@ static int copyFile(src,dst)
 	   fall through:  if dest doesn't exist, copy the directory, recurs */
 
 
-  int         i, dstExists, srcdir, dstdir;
+  int         dstExists, srcdir, dstdir;
   struct stat srcSt, dstSt;
   char        buf[1024];
-  static char *owdiff[3] = { "\nOk", "nNo", "\033Cancel" };
-  static char *owsame[4] = { "\nOk", "dDon't Ask", "nNo", "\033Cancel" };
+  static char *owdiff[] = { "\nOk", "nNo", "\033Cancel" };
+  static char *owsame[] = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
 
   if (DEBUG) fprintf(stderr,"copyFile %s %s\n", src, dst);
+
+#ifdef AUTO_EXPAND
+  Dirtosubst(src);
+#endif
 
   if (stat(src,&srcSt)) return 0;  /* source doesn't exist, it would seem */
 
   dstExists = (stat(dst, &dstSt)==0);
 
   if (dstExists) {   /* ask about overwriting... */
-    srcdir = (stat2bf((u_int) srcSt.st_mode) == BF_DIR);
-    dstdir = (stat2bf((u_int) dstSt.st_mode) == BF_DIR);
+#ifdef AUTO_EXPAND
+  srcdir = (stat2bf((u_int) srcSt.st_mode , src) == BF_DIR);
+  dstdir = (stat2bf((u_int) dstSt.st_mode , dst) == BF_DIR);
+#else
+  srcdir = (stat2bf((u_int) srcSt.st_mode) == BF_DIR);
+  dstdir = (stat2bf((u_int) dstSt.st_mode) == BF_DIR);
+#endif
 
     sprintf(buf, "%s '%s' already exists.  Replace it with %s '%s'?",
 	    (dstdir) ? "Directory" : "File", dst,
 	    (srcdir) ? "contents of directory" : "file", src);
 
     if (srcdir == dstdir) {
+      if (overwrite==OWRT_NEVER) return -1;
       if (overwrite==OWRT_ASK) {
-	i = PopUp(buf, owsame, 4);
-	if (i==1) overwrite = OWRT_NOASK;
-	if (i==2) return -1;
-	else if (i==3) { overwrite = OWRT_CANCEL;  return 1; }
+	switch (PopUp(buf, owsame, COUNT(owsame))) {
+	  case 1: overwrite = OWRT_ALWAYS; break;
+	  case 2: return -1;
+	  case 3: overwrite = OWRT_NEVER; return -1;
+	  case 4: overwrite = OWRT_CANCEL;  return 1;
+	}
       }
     }
     else {     /* one's a dir, the other's a file.  *ALWAYS* ask! */
-      i = PopUp(buf, owdiff, 3);
-      if (i==1) return -1;
-      else if (i==2) { overwrite = OWRT_CANCEL;  return 1; }
+      switch (PopUp(buf, owdiff, COUNT(owdiff))) {
+        case 1: return -1;
+        case 2: overwrite = OWRT_CANCEL;  return 1;
+      }
     }
 
 
@@ -5035,8 +5634,11 @@ static void cp()
     havedst = 1;
   }
 
-
+#ifdef AUTO_EXPAND
+  switch(stat2bf((u_int) srcSt.st_mode , cpDstPath)) {
+#else
   switch(stat2bf((u_int) srcSt.st_mode)) {
+#endif
     /* determine how to copy, by filetype */
 
     /* NOTE:  There is no S_IFLNK case here, since we're using 'stat()' and
@@ -5052,7 +5654,11 @@ static void cp()
     }
   }
   else {
+#ifdef AUTO_EXPAND
+    if (stat2bf((u_int) dstSt.st_mode , cpDstPath) != BF_DIR) {
+#else
     if (stat2bf((u_int) dstSt.st_mode) != BF_DIR) {
+#endif
       SetISTR(ISTR_WARNING,"%s: not a directory", cpDstPath);
       copyerr++;
       return;
@@ -5130,7 +5736,12 @@ static void cp_dir()
       goto done;
     }
 
-    if (stat2bf((u_int) srcSt.st_mode) == BF_DIR) {
+#ifdef AUTO_EXPAND
+    if (stat2bf((u_int) srcSt.st_mode , cpSrcPath) == BF_DIR)
+#else
+    if (stat2bf((u_int) srcSt.st_mode) == BF_DIR)
+#endif
+    {
       cpSrcPath[oldsrclen] = '\0';
       continue;                     /* don't remove from list, just skip */
     }
@@ -5189,9 +5800,9 @@ static void cp_file(st, exists)
      int exists;
 /*****************************/
 {
-  register int srcFd, dstFd, rcount, wcount, i;
+  register int srcFd, dstFd, rcount, wcount;
   char         buf[8192];
-  static char  *owbuts[4] = { "\nOk", "dDon't Ask", "nNo", "\033Cancel" };
+  static char  *owbuts[] = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
 
   if (DEBUG) fprintf(stderr,"cp_file:  src='%s',  dst='%s'\n",
 		     cpSrcPath, cpDstPath);
@@ -5203,13 +5814,15 @@ static void cp_file(st, exists)
   }
 
   if (exists) {
+    if (overwrite==OWRT_NEVER) return;
     if (overwrite==OWRT_ASK) {
       sprintf(buf, "File '%s' exists.\n\nOverwrite?", cpDstPath);
-      i = PopUp(buf, owbuts, 4);
-
-      if      (i==1) overwrite = OWRT_NOASK;
-      else if (i==2) return;
-      else if (i==3) { overwrite = OWRT_CANCEL;  return; }
+      switch (PopUp(buf, owbuts, 4)) {
+        case 1: overwrite = OWRT_ALWAYS; break;
+        case 2: return;
+        case 3: overwrite = OWRT_NEVER; return;
+        case 4: overwrite = OWRT_CANCEL;  return;
+      }
     }
     dstFd = open(cpDstPath, O_WRONLY|O_TRUNC, 0);
   }
@@ -5303,8 +5916,14 @@ static void cp_fifo(st, exists)
 
 
 /*********************************/
+#ifdef AUTO_EXPAND
+static int stat2bf(uistmode, path)
+     u_int uistmode;
+     char *path;
+#else
 static int stat2bf(uistmode)
      u_int uistmode;
+#endif
 {
   /* given the 'st.st_mode' field from a successful stat(), returns
      BF_FILE, BF_DIR, BF_BLK, BF_CHR, BF_FIFO, or BF_SOCK.  Does *NOT*
@@ -5318,6 +5937,9 @@ static int stat2bf(uistmode)
   else if (S_ISBLK(stmode))  rv = BF_BLK;
   else if (S_ISFIFO(stmode)) rv = BF_FIFO;
   else if (S_ISSOCK(stmode)) rv = BF_SOCK;
+#ifdef AUTO_EXPAND
+  else if (Isarchive(path))  rv = BF_DIR;
+#endif
   else                       rv = BF_FILE;
 
   return rv;
@@ -5418,4 +6040,56 @@ static int selmatch1(name, arg)
 }
 
 
+static IVIS *icon_vis_list = NULL;
 
+/***************************************************************/
+static void recIconVisible(name, icon)
+  char *name;
+  int   icon;
+{
+  IVIS *ptr, *prev = NULL;
+
+  for (ptr = icon_vis_list; ptr; prev = ptr, ptr = ptr->next) {
+    if (!strcmp(ptr->name, name)) {
+      ptr->icon = icon;
+      return;
+    }
+  }
+
+  ptr = calloc(sizeof(IVIS), 1);
+  if (!ptr)
+    return;
+
+  ptr->name = strdup(name);
+
+  if (!ptr->name) {
+    free(ptr);
+    return;
+  }
+
+  if (!prev) {
+    icon_vis_list = ptr;
+  } else {
+    prev->next = ptr;
+  }
+
+  ptr->next = NULL;
+  ptr->icon = icon;
+}
+
+/***************************************************************/
+static void restIconVisible(br)
+  BROWINFO *br;
+{
+  IVIS *ptr;
+
+  for (ptr = icon_vis_list; ptr; ptr = ptr->next) {
+    if (!strcmp(ptr->name, br->path)) {
+      if (ptr->icon >= 0) {
+        makeIconVisible(br, ptr->icon);
+        updateSel(br, ptr->icon, 0, 0);
+      }
+      return;
+    }
+  }
+}

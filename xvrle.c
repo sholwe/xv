@@ -43,7 +43,7 @@ int LoadRLE(fname, pinfo)
   byte   bgcol[256];
   byte   maps[3][256];
   int    xpos, ypos, w, h, flags, ncolors, pixelbits, ncmap, cmaplen;
-  int    cmtlen, npixels, bufsize=0;
+  int    cmtlen;
   byte  *img;
   long filesize;
   char  *bname, *errstr;
@@ -176,44 +176,32 @@ int LoadRLE(fname, pinfo)
 
   errstr = NULL;
   if (ncolors == 0 || ncolors == 2)
-    errstr = "Unsupported number of channels in RLE file";
+    errstr = "Unsupt. # of channels in RLE file.\n";
 
   if (pixelbits != 8)
-    errstr = "Only 8-bit pixels supported in RLE files";
+    errstr = "Only 8-bit pixels supported in RLE files.\n";
 
   if (ncmap==0 || ncmap==1 || ncmap == 3 || ncmap == ncolors) { /* ok */ }
-  else errstr = "Invalid number of colormap channels in RLE file";
+  else errstr = "Invalid # of colormap channels in RLE file.\n";
 
-  npixels = w * h;
-  if (w <= 0 || h <= 0 || npixels/w != h)
-    errstr = "RLE image dimensions out of range";
+  if (w<1 || h<1)
+    errstr = "Bogus size in RLE header.\n";
 
 
   if (errstr) {
     fclose(fp);
-    if (pinfo->comment)
-      free(pinfo->comment);
-    pinfo->comment = (char *) NULL;
+    if (pinfo->comment) free(pinfo->comment);  pinfo->comment = (char *) NULL;
     return rleError(bname, errstr);
   }
 
 
   /* allocate image memory */
-  if (ncolors == 1)
-    img = (byte *) calloc((size_t) npixels, (size_t) 1);
-  else {
-    bufsize = 3*npixels;
-    if (bufsize/3 != npixels)
-      return rleError(bname, "RLE image dimensions out of range");
-    img = (byte *) calloc((size_t) bufsize, (size_t) 1);
-  }
-
+  if (ncolors == 1) img = (byte *) calloc((size_t) w * h,     (size_t) 1);
+               else img = (byte *) calloc((size_t) w * h * 3, (size_t) 1);
   if (!img) {
     fclose(fp);
-    if (pinfo->comment)
-      free(pinfo->comment);
-    pinfo->comment = (char *) NULL;
-    return rleError(bname, "Unable to allocate RLE image data");
+    if (pinfo->comment) free(pinfo->comment);  pinfo->comment = (char *) NULL;
+    return rleError(bname, "unable to allocate image data.\n");
   }
 
 
@@ -221,10 +209,10 @@ int LoadRLE(fname, pinfo)
   if ((flags & H_CLEARFIRST) && !(flags & H_NO_BACKGROUND)) {
     byte *ip;
     if (ncolors == 1) {
-      for (i=0, ip=img; i<npixels; i++, ip++) *ip = bgcol[0];
+      for (i=0, ip=img; i<w*h; i++, ip++) *ip = bgcol[0];
     }
     else {
-      for (i=0, ip=img; i<npixels; i++)
+      for (i=0, ip=img; i<w*h; i++)
 	for (j=0; j<3; j++, ip++) *ip = bgcol[j];
     }
   }
@@ -242,7 +230,7 @@ int LoadRLE(fname, pinfo)
   if (ncmap) {
     byte *ip;
     int   imagelen, cmask;
-    imagelen = (ncolors==1) ? npixels : bufsize;
+    imagelen = (ncolors==1) ? w*h : w*h*3;
     cmask = (cmaplen-1);
 
     if (ncmap == 1) {   /* single gamma curve */
@@ -250,7 +238,7 @@ int LoadRLE(fname, pinfo)
     }
 
     else if (ncmap >= 3 && ncolors >=3) {   /* one curve per band */
-      for (i=0, ip=img; i<npixels; i++) {
+      for (i=0, ip=img; i<w*h; i++) {
 	*ip = maps[0][*ip & cmask];   ip++;
 	*ip = maps[1][*ip & cmask];   ip++;
 	*ip = maps[2][*ip & cmask];   ip++;

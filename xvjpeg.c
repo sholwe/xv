@@ -51,11 +51,21 @@ static    void         drawJD             PARM((int, int, int, int));
 static    void         clickJD            PARM((int, int));
 static    void         doCmd              PARM((int));
 static    void         writeJPEG          PARM((void));
+#if JPEG_LIB_VERSION > 60
+METHODDEF(void)        xv_error_exit      PARM((j_common_ptr));
+METHODDEF(void)        xv_error_output    PARM((j_common_ptr));
+METHODDEF(void)        xv_prog_meter      PARM((j_common_ptr));
+#else
 METHODDEF void         xv_error_exit      PARM((j_common_ptr));
 METHODDEF void         xv_error_output    PARM((j_common_ptr));
 METHODDEF void         xv_prog_meter      PARM((j_common_ptr));
+#endif
 static    unsigned int j_getc             PARM((j_decompress_ptr));
+#if JPEG_LIB_VERSION > 60
+METHODDEF(boolean)     xv_process_comment PARM((j_decompress_ptr));
+#else
 METHODDEF boolean      xv_process_comment PARM((j_decompress_ptr));
+#endif
 static    int          writeJFIF          PARM((FILE *, byte *, int,int,int));
 
 
@@ -85,10 +95,10 @@ void CreateJPEGW()
 
   XSelectInput(theDisp, jpegW, ExposureMask | ButtonPressMask | KeyPressMask);
 
-  DCreate(&qDial, jpegW, 10, 10, 80, 100, 1, 100, 75, 5,
+  DCreate(&qDial, jpegW, 10, 10, 80, 100, 1.0, 100.0, 75.0, 1.0, 5.0,
 	  infofg, infobg, hicol, locol, "Quality", "%");
 
-  DCreate(&smDial, jpegW, 120, 10, 80, 100, 0, 100, 0, 5,
+  DCreate(&smDial, jpegW, 120, 10, 80, 100, 0.0, 100.0, 0.0, 1.0, 5.0,
 	  infofg, infobg, hicol, locol, "Smoothing", "%");
 
   BTCreate(&jbut[J_BOK], jpegW, JWIDE-180-1, JHIGH-10-BUTTH-1, 80, BUTTH,
@@ -415,7 +425,11 @@ static void writeJPEG()
 
 
 /**************************************************/
-METHODDEF void xv_error_exit(cinfo)
+#if JPEG_LIB_VERSION > 60
+METHODDEF(void) xv_error_exit(cinfo)
+#else
+METHODDEF void  xv_error_exit(cinfo)
+#endif
      j_common_ptr cinfo;
 {
   my_error_ptr myerr;
@@ -427,7 +441,11 @@ METHODDEF void xv_error_exit(cinfo)
 
 
 /**************************************************/
-METHODDEF void xv_error_output(cinfo)
+#if JPEG_LIB_VERSION > 60
+METHODDEF(void) xv_error_output(cinfo)
+#else
+METHODDEF void  xv_error_output(cinfo)
+#endif
      j_common_ptr cinfo;
 {
   my_error_ptr myerr;
@@ -441,7 +459,11 @@ METHODDEF void xv_error_output(cinfo)
 
 
 /**************************************************/
-METHODDEF void xv_prog_meter(cinfo)
+#if JPEG_LIB_VERSION > 60
+METHODDEF(void) xv_prog_meter(cinfo)
+#else
+METHODDEF void  xv_prog_meter(cinfo)
+#endif
      j_common_ptr cinfo;
 {
   struct jpeg_progress_mgr *prog;
@@ -706,7 +728,11 @@ static unsigned int j_getc(cinfo)
 
 
 /**************************************************/
-METHODDEF boolean xv_process_comment(cinfo)
+#if JPEG_LIB_VERSION > 60
+METHODDEF(boolean) xv_process_comment(cinfo)
+#else
+METHODDEF boolean  xv_process_comment(cinfo)
+#endif
      j_decompress_ptr cinfo;
 {
   int          length, hasnull;
@@ -794,8 +820,8 @@ static int writeJFIF(fp, pic, w,h, coltype)
 
 
   jpeg_set_defaults(&cinfo);
-  jpeg_set_quality(&cinfo, qDial.val, TRUE);
-  cinfo.smoothing_factor = smDial.val;
+  jpeg_set_quality(&cinfo, (int)qDial.val, TRUE);
+  cinfo.smoothing_factor = (int)smDial.val;
 
 
   jpeg_start_compress(&cinfo, TRUE);
@@ -804,7 +830,7 @@ static int writeJFIF(fp, pic, w,h, coltype)
   /*** COMMENT HANDLING ***/
 
   sprintf(xvcmt, "%sXV %s  Quality = %d, Smoothing = %d\n",
-	  CREATOR_STR, REVDATE, qDial.val, smDial.val);
+	  CREATOR_STR, REVDATE, (int)qDial.val, (int)smDial.val);
 
   if (picComments) {   /* append XV comment */
     char *sp, *sp1;  int done;
@@ -862,6 +888,29 @@ static int writeJFIF(fp, pic, w,h, coltype)
   jpeg_destroy_compress(&cinfo);
   return 0;
 }
+
+
+
+
+
+/*******************************************/
+void
+VersionInfoJPEG()	/* GRR 19980605, 19980607 */
+{
+  int major = JPEG_LIB_VERSION / 10;
+  int minor = JPEG_LIB_VERSION % 10;
+  char minoralpha[2];
+
+  if (minor) {
+    minoralpha[0] = (char)(minor - 1 + 'a');
+    minoralpha[1] = '\0';
+  } else
+    minoralpha[0] = '\0';
+
+/* fprintf(stderr, "   Compiled with libjpeg %d.%d.\n", major, minor); */
+  fprintf(stderr, "   Compiled with libjpeg %d%s.\n", major, minoralpha);
+}
+
 
 
 

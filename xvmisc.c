@@ -103,10 +103,18 @@ unsigned long fg, bg;
   if (!usesize || !(i&WidthValue))  w = defw;
   if (!usesize || !(i&HeightValue)) h = defh;
 
-  hints.flags |= USSize;
+  hints.flags |= USSize | PWinGravity;
 
-  if (i&XValue && i&XNegative) x = dispWIDE - w - abs(x);
-  if (i&YValue && i&YNegative) y = dispHIGH - h - abs(y);
+  hints.win_gravity = NorthWestGravity;
+  if (i&XValue && i&XNegative) {
+    hints.win_gravity = NorthEastGravity;
+    x = dispWIDE - (w + 2 * bwidth) - abs(x);
+  }
+  if (i&YValue && i&YNegative) {
+    hints.win_gravity = (hints.win_gravity == NorthWestGravity) ?
+      SouthWestGravity : SouthEastGravity;
+    y = dispHIGH - (h + 2 * bwidth) - abs(y);
+  }
 
 
 #define VROOT_TRANS
@@ -142,19 +150,18 @@ unsigned long fg, bg;
   if (!win) return(win);   /* leave immediately if couldn't create */
 
 
-  XSetStandardProperties(theDisp, win, name, name, None, NULL, 0, &hints);
-
   xwmh.input = True;
   xwmh.flags = InputHint;
   if (iconPix) { xwmh.icon_pixmap = iconPix;  xwmh.flags |= IconPixmapHint; }
-  XSetWMHints(theDisp, win, &xwmh);
 
   if (clname && strlen(clname)) {
     classh.res_name = "xv";
     classh.res_class = clname;
-    XSetClassHint(theDisp, win, &classh);
     StoreDeleteWindowProp(win);
   }
+
+  XmbSetWMProperties(theDisp, win, name, name, NULL, 0, &hints, &xwmh,
+      clname ? &classh : NULL);
 
   return(win);
 }
@@ -232,28 +239,28 @@ int CursorKey(ks, shift, dotrans)
   int  i = CK_NONE;
 
   if      (ks==XK_Up    || ks==XK_KP_Up    ||
-	   ks==XK_KP_8  || ks==XK_F28)             i=CK_UP;
+			   ks==XK_F28)             i=CK_UP;
 
   else if (ks==XK_Down  || ks==XK_KP_Down  ||
-	   ks==XK_KP_2  || ks==XK_F34)             i=CK_DOWN;
+			   ks==XK_F34)             i=CK_DOWN;
 
   else if (ks==XK_Left  || ks==XK_KP_Left  ||
-	   ks==XK_KP_4  || ks==XK_F30)             i=CK_LEFT;
+			   ks==XK_F30)             i=CK_LEFT;
 
   else if (ks==XK_Right || ks==XK_KP_Right ||
-	   ks==XK_KP_6  || ks==XK_F32)             i=CK_RIGHT;
+			   ks==XK_F32)             i=CK_RIGHT;
 
   else if (ks==XK_Prior || ks==XK_KP_Prior ||
-	   ks==XK_KP_9  || ks==XK_F29)             i=CK_PAGEUP;
+			   ks==XK_F29)             i=CK_PAGEUP;
 
   else if (ks==XK_Next  || ks==XK_KP_Next  ||
-	   ks==XK_KP_3  || ks==XK_F35)             i=CK_PAGEDOWN;
+			   ks==XK_F35)             i=CK_PAGEDOWN;
 
   else if (ks==XK_Home  || ks==XK_KP_Home  ||
-	   ks==XK_KP_7  || ks==XK_F27)             i=CK_HOME;
+			   ks==XK_F27)             i=CK_HOME;
 
   else if (ks==XK_End   || ks==XK_KP_End   ||
-	   ks==XK_KP_1  || ks==XK_F33)             i=CK_END;
+			   ks==XK_F33)             i=CK_END;
 
   else i = CK_NONE;
 
@@ -503,6 +510,11 @@ void Quit(i)
      as we have to keep the alloc'd colors around, but we don't want anything
      else to stay */
 
+#ifdef AUTO_EXPAND
+  chdir(initdir);
+  Vdsettle();
+#endif
+
   if (!theDisp) exit(i);   /* called before connection opened */
 
   if (useroot && i==0) {   /* save the root info */
@@ -524,6 +536,26 @@ void Quit(i)
 
 #ifdef HAVE_TIFF
     if (tiffW) XDestroyWindow(theDisp, tiffW);
+#endif
+
+#ifdef HAVE_PNG
+    if (pngW)  XDestroyWindow(theDisp, pngW);
+#endif
+
+#ifdef HAVE_PCD
+    if (pcdW)  XDestroyWindow(theDisp, pcdW);
+#endif
+
+#ifdef HAVE_PIC2
+    if (pic2W) XDestroyWindow(theDisp, pic2W);
+#endif
+
+#ifdef HAVE_MGCSFX
+    if (mgcsfxW) XDestroyWindow(theDisp, mgcsfxW);
+#endif
+
+#ifdef HAVE_PNG
+    if (pngW)  XDestroyWindow(theDisp, pngW);
 #endif
 
     /* if NOT using stdcmap for images, free stdcmap */
@@ -721,6 +753,26 @@ static void set_cursors(mainc, otherc)
 
 #ifdef HAVE_TIFF
   if (tiffW) XDefineCursor(theDisp, tiffW, otherc);
+#endif
+
+#ifdef HAVE_PNG
+  if (pngW)  XDefineCursor(theDisp, pngW, otherc);
+#endif
+
+#ifdef HAVE_PNG
+  if (pngW)  XDefineCursor(theDisp, pngW, otherc);
+#endif
+
+#ifdef HAVE_PCD
+  if (pcdW)  XDefineCursor(theDisp, pcdW, otherc);
+#endif
+
+#ifdef HAVE_PIC2
+  if (pic2W) XDefineCursor(theDisp, pic2W, otherc);
+#endif
+
+#ifdef HAVE_MGCSFX
+  if (mgcsfxW) XDefineCursor(theDisp, mgcsfxW, otherc);
 #endif
 }
 
@@ -921,7 +973,7 @@ void XVDeletedFile(fullname)
 void XVCreatedFile(fullname)
      char *fullname;
 {
-  /* called whenever a file has been deleted.  Updates browser & dir windows,
+  /* called whenever a file has been created.  Updates browser & dir windows,
      if necessary */
 
   BRCreatedFile(fullname);
@@ -1006,6 +1058,9 @@ void xv_getwd(buf, buflen)
 	((rv=(char *) getenv("cwd"))==NULL)) rv = "./";
     strcpy(buf, rv);
   }
+#ifdef AUTO_EXPAND
+  Vdtodir(buf);
+#endif
 }
 
 

@@ -14,8 +14,9 @@
 /* GRR orig jumbo enhancements patch:	20000220 */
 /* GRR 1st public jumbo F+E patches:	20040531 */
 /* GRR 2nd public jumbo F+E patches:	20050410 */
-#define REVDATE   "version 3.10a-jumboFix of 20050410"
-#define VERSTR    "3.10a-20050410"
+/* GRR 3rd public jumbo F+E patches:	20050501 */
+#define REVDATE   "version 3.10a-jumboFix+Enh of 20050501"
+#define VERSTR    "3.10a-20050501"
 
 /*
  * uncomment the following, and modify for your site, but only if you've
@@ -49,6 +50,10 @@
 /* START OF MACHINE-DEPENDENT CONFIGURATION INFO */
 /*************************************************/
 
+
+#define ENABLE_FIXPIX_SMOOTH	/* GRR 19980607 */
+
+
 /* Things to make xv more likely to just build, without the user tweaking
    the makefile */
 
@@ -67,6 +72,14 @@
 #  define SVR4
 #endif
 
+#if defined(__sony_news) && defined(bsd43) && !defined(__bsd43)
+#  define __bsd43
+#elif defined(__sony_news) && (defined(SYSTYPE_BSD) || defined(__SYSTYPE_BSD)) && !defined(bsd43) && !defined(__bsd43)
+#  define bsd43
+#  define __bsd43
+#endif
+
+#include <signal.h>      /* for interrupt handling */
 
 /* at least on Linux, the following file (1) includes sys/types.h and
  * (2) defines __USE_BSD (which was not defined before here), so __linux__
@@ -78,7 +91,9 @@
 #  ifndef _LINUX_LIMITS_H
 #    include <linux/limits.h>
 #  endif
-#  define USLEEP
+#  ifndef USLEEP
+#    define USLEEP
+#  endif
    /* want only one or the other defined, not both: */
 #  if !defined(BSDTYPES) && !defined(__USE_BSD)
 #    define BSDTYPES
@@ -117,6 +132,16 @@
 #endif
 
 
+#if defined(__sony_news) && defined(__bsd43)
+#  include <unistd.h>
+#endif
+
+
+#if defined(__FreeBSD__)
+#  include <sys/param.h>
+#endif
+
+
 /* include files */
 #include <stdio.h>
 #include <math.h>
@@ -132,9 +157,11 @@
 
 #ifndef VMS
 #  include <errno.h>
-   extern int   errno;             /* SHOULD be in errno.h, but often isn't */
-#  if !defined(__NetBSD__) && !(defined(__linux__) && defined(__USE_BSD))
-     extern char *sys_errlist[];     /* this too... */
+#  ifndef __NetBSD__
+#    if !(defined __GLIBC__ && __GLIBC__ >= 2)
+       extern int   errno;         /* SHOULD be in errno.h, but often isn't */
+       extern char *sys_errlist[]; /* this too... */
+#    endif
 #  endif
 #endif
 
@@ -203,9 +230,10 @@
 #include <X11/Xatom.h>
 #include <X11/Xmd.h>
 
+#ifdef TV_L10N
+#  include <X11/Xlocale.h>
+#endif
 
-#undef SIGCHLD           /* defined in both Xos.h and signal.h */
-#include <signal.h>      /* for interrupt handling */
 
 #include <sys/types.h>
 
@@ -316,7 +344,9 @@
 #  endif
 #endif
 
-
+#ifndef S_IRWUSR
+#  define S_IRWUSR	(S_IRUSR|__S_IWRITE)
+#endif
 
 #ifndef MAXPATHLEN
 #  define MAXPATHLEN 256
@@ -343,13 +373,36 @@
 #endif
 
 
-/* GRR 20040430:  This is new and still only partially implemented.  No doubt
- *                there are many other systems that have mkstemp() (SUSv3),
- *                but let's start small...  */
-#if defined(__linux__) || defined(__OpenBSD__)
-#  define USE_MKSTEMP           /* use 'mkstemp()' instead of 'mktemp()' */
+/* GRR 20040430:  This is new and still not fully deployed.  No doubt there
+ *                are other systems that have mkstemp() (SUSv3); we can add
+ *                them later. */
+#ifndef VMS       /* VMS hates multi-line definitions */
+#  if defined(__linux__) || defined(__OpenBSD__) || defined(__NetBSD__) || \
+      defined(__bsdi__)
+#    ifndef USE_MKSTEMP
+#      define USE_MKSTEMP       /* use 'mkstemp()' instead of 'mktemp()' */
+#    endif                      /* >> SECURITY ISSUE << */
+#  endif
 #endif
 
+
+/* GRR 20040503:  This is new and so far tested only under Linux.  But it
+ *                allows -wait to work with subsecond values as long as
+ *                times() exists and clock_t is a long int (latter matters
+ *                only if/when clocks wrap, which for Linux is multiples of
+ *                497.11 days since the last reboot). */
+#if defined(__linux__)
+#  define USE_TICKS             /* use times()/Timer(), not time()/sleep() */
+#  include <limits.h>           /* LONG_MAX (really want CLOCK_T_MAX) */
+#  include <sys/times.h>        /* times() */
+#  ifndef CLK_TCK               /* can be undefined in strict-ANSI mode */
+#    define CLK_TCK CLOCKS_PER_SEC   /* claimed to be same thing in time.h */
+#  endif
+#endif
+
+#if (defined(SYSV) || defined(SVR4) || defined(linux)) && !defined(USE_GETCWD)
+#  define USE_GETCWD
+#endif
 
 /*****************************/
 /* END OF CONFIGURATION INFO */
@@ -363,17 +416,21 @@
 #  define HAVE_TIFF
 #endif
 
+#ifdef DOPNG
+#  define HAVE_PNG
+#endif
+
 #ifdef DOPDS
 #  define HAVE_PDS
 #endif
 
 
 
-#define PROGNAME  "xv"             /* used in resource database */
+#define PROGNAME   "xv"            /* used in resource database */
 
-#define MAXNAMES 4096              /* max # of files in ctrlW list */
+#define MAXNAMES   32768           /* max # of files in ctrlW list */
 
-#define MAXBRWIN   4               /* max # of vis browser windows */
+#define MAXBRWIN   16              /* max # of vis browser windows */
 
 /* strings in the INFOBOX (used in SetISTR and GetISTR) */
 #define NISTR         10    /* number of ISTRs */
@@ -494,24 +551,80 @@
 #define F_TIFINC  0
 #endif
 
+#ifdef HAVE_PNG
+#define F_PNGINC  1
+#else
+#define F_PNGINC  0
+#endif
+
+#ifdef HAVE_MAG
+#  define F_MAGINC  1
+#else
+#  define F_MAGINC  0
+#endif
+
+#ifdef HAVE_PIC
+#  define F_PICINC  1
+#else
+#  define F_PICINC  0
+#endif
+
+#ifdef HAVE_MAKI
+#  define F_MAKINC  1
+#else
+#  define F_MAKINC  0
+#endif
+
+#ifdef HAVE_PI
+#  define F_PAIINC  1
+#else
+#  define F_PAIINC  0
+#endif
+
+#ifdef HAVE_PIC2
+#  define F_PC2INC  1
+#else
+#  define F_PC2INC  0
+#endif
+
+#ifdef HAVE_MGCSFX
+#  define F_MGCSFXINC  1
+#else
+#  define F_MGCSFXINC  0
+#endif
+
+#ifdef MACBINARY
+#  define MACBSIZE 128
+#endif
 
 #define F_GIF         0
 #define F_JPEG      ( 0 + F_JPGINC)
 #define F_TIFF      ( 0 + F_JPGINC + F_TIFINC)
-#define F_PS        ( 1 + F_JPGINC + F_TIFINC)
-#define F_PBMRAW    ( 2 + F_JPGINC + F_TIFINC)
-#define F_PBMASCII  ( 3 + F_JPGINC + F_TIFINC)
-#define F_XBM       ( 4 + F_JPGINC + F_TIFINC)
-#define F_XPM       ( 5 + F_JPGINC + F_TIFINC)
-#define F_BMP       ( 6 + F_JPGINC + F_TIFINC)
-#define F_SUNRAS    ( 7 + F_JPGINC + F_TIFINC)
-#define F_IRIS      ( 8 + F_JPGINC + F_TIFINC)
-#define F_TARGA     ( 9 + F_JPGINC + F_TIFINC)
-#define F_FITS      (10 + F_JPGINC + F_TIFINC)
-#define F_PM        (11 + F_JPGINC + F_TIFINC)
-#define F_DELIM1    (12 + F_JPGINC + F_TIFINC)     /* ----- */
-#define F_FILELIST  (13 + F_JPGINC + F_TIFINC)
-#define F_MAXFMTS   (14 + F_JPGINC + F_TIFINC)     /* 15, normally */
+#define F_PNG       ( 0 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_PS        ( 1 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_PBMRAW    ( 2 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_PBMASCII  ( 3 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_XBM       ( 4 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_XPM       ( 5 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_BMP       ( 6 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_SUNRAS    ( 7 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_IRIS      ( 8 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_TARGA     ( 9 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_FITS      (10 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_PM        (11 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define F_ZX        (12 + F_JPGINC + F_TIFINC + F_PNGINC)   /* [JCE] */
+#define F_WBMP      (13 + F_JPGINC + F_TIFINC + F_PNGINC)
+#define JP_EXT_F    (F_WBMP)
+#define F_MAG       (JP_EXT_F + F_MAGINC)
+#define F_PIC       (JP_EXT_F + F_MAGINC + F_PICINC)
+#define F_MAKI      (JP_EXT_F + F_MAGINC + F_PICINC + F_MAKINC)
+#define F_PI        (JP_EXT_F + F_MAGINC + F_PICINC + F_MAKINC + F_PAIINC)
+#define F_PIC2      (JP_EXT_F + F_MAGINC + F_PICINC + F_MAKINC + F_PAIINC + F_PC2INC)
+#define F_MGCSFX    (JP_EXT_F + F_MAGINC + F_PICINC + F_MAKINC + F_PAIINC + F_PC2INC + F_MGCSFXINC)
+#define JP_EXT_F_END (F_MGCSFX)
+#define F_DELIM1    (JP_EXT_F_END + 1)   /* ----- */
+#define F_FILELIST  (JP_EXT_F_END + 2)
+#define F_MAXFMTS   (JP_EXT_F_END + 3)   /* 23, normally */
 
 
 
@@ -541,6 +654,19 @@
 #define RFT_XPM      17
 #define RFT_XWD      18
 #define RFT_FITS     19
+#define RFT_PNG      20
+#define RFT_ZX       21    /* [JCE] */
+#define RFT_WBMP     22
+#define RFT_PCD      23
+#define RFT_HIPS     24
+#define RFT_BZIP2    25
+#define JP_EXT_RFT   (RFT_BZIP2)
+#define RFT_MAG      (JP_EXT_RFT + 1)
+#define RFT_MAKI     (JP_EXT_RFT + 2)
+#define RFT_PIC      (JP_EXT_RFT + 3)
+#define RFT_PI       (JP_EXT_RFT + 4)
+#define RFT_PIC2     (JP_EXT_RFT + 5)
+#define RFT_MGCSFX   (JP_EXT_RFT + 6)
 
 /* definitions for page up/down, arrow up/down list control */
 #define LS_PAGEUP   0
@@ -599,7 +725,8 @@
 #define RM_CBRICK  7     /* centered on a 'brick' bg */
 #define RM_ECENTER 8     /* symmetrical tiled */
 #define RM_ECMIRR  9     /* symmetrical mirror tiled */
-#define RM_MAX     RM_ECMIRR
+#define RM_UPLEFT 10     /* just in upper left corner */
+#define RM_MAX     RM_UPLEFT
 
 
 /* values of colorMapMode */
@@ -649,7 +776,8 @@
 #define RMB_CBRICK   8
 #define RMB_ECENTER  9
 #define RMB_ECMIRR   10
-#define RMB_MAX      11
+#define RMB_UPLEFT   11
+#define RMB_MAX      12
 
 
 /* indicies into conv24MB */
@@ -784,9 +912,9 @@ typedef struct scrl {
 		 int len;               /* length of major axis */
 		 int vert;              /* true if vertical, else horizontal */
 		 int active;            /* true if scroll bar can do anything*/
-		 int min,max;           /* min/max values 'pos' can take */
-		 int val;               /* 'value' of scrollbar */
-		 int page;              /* amt val change on pageup/pagedown */
+		 double min,max;        /* min/max values 'pos' can take */
+		 double val;            /* 'value' of scrollbar */
+		 double page;           /* amt val change on pageup/pagedown */
 		 int tpos;              /* thumb pos. (pixels from tmin) */
 		 int tmin,tmax;         /* min/max thumb offsets (from 0,0) */
 		 int tsize;             /* size of thumb (in pixels) */
@@ -801,9 +929,10 @@ typedef struct scrl {
 typedef struct { Window win;            /* window ID */
 		 int x,y,w,h;           /* window coords in parent */
 		 int active;            /* true if can do anything*/
-		 int min,max;           /* min/max values 'pos' can take */
-		 int val;               /* 'value' of dial */
-		 int page;              /* amt val change on pageup/pagedown */
+		 double min,max;        /* min/max values 'pos' can take */
+		 double val;            /* 'value' of dial */
+		 double inc;            /* amt val change on up/down */
+		 double page;           /* amt val change on pageup/pagedown */
 		 char *title;           /* title for this guage */
 		 char *units;           /* string appended to value */
 		 u_long fg,bg,hi,lo;    /* colors */
@@ -971,15 +1100,19 @@ WHERE int           theScreen;
 WHERE unsigned int  ncells, dispWIDE, dispHIGH, dispDEEP;
 WHERE unsigned int  vrWIDE, vrHIGH, maxWIDE, maxHIGH;
 WHERE Colormap      theCmap, LocalCmap;
-WHERE Window        rootW, mainW, vrootW;
+WHERE Window        spec_window, rootW, mainW, vrootW;
 WHERE GC            theGC;
 WHERE u_long        black, white, fg, bg, infofg, infobg;
 WHERE u_long        hicol, locol;
 WHERE u_long        blkRGB, whtRGB;
 WHERE Font          mfont, monofont;
 WHERE XFontStruct   *mfinfo, *monofinfo;
+#ifdef TV_L10N
+WHERE XFontSet      monofset;
+WHERE XFontSetExtents *monofsetinfo;
+#endif
 WHERE Visual        *theVisual;
-WHERE Cursor        arrow, cross, tcross, zoom, inviso;
+WHERE Cursor        arrow, cross, tcross, zoom, inviso, tlcorner;
 WHERE Pixmap        iconPix, iconmask;
 WHERE Pixmap        riconPix, riconmask;
 WHERE int           showzoomcursor;
@@ -995,6 +1128,10 @@ WHERE int            mono;                  /* true if displaying grayscale */
 WHERE char           formatStr[80];         /* short-form 'file format' */
 WHERE int            picType;               /* CONV24_8BIT,CONV24_24BIT,etc.*/
 WHERE char          *picComments;           /* text comments on current pic */
+
+#ifdef TV_L10N
+WHERE int            xlocale;		    /* true if Xlib supports locale */
+#endif
 
 WHERE int            numPages, curPage;     /* for multi-page files */
 WHERE char           pageBaseName[64];      /* basename for multi-page files */
@@ -1029,6 +1166,23 @@ WHERE int            nfcols;       /* number of colors to free */
 WHERE unsigned long  cols[256];    /* maps pic pixel values to X pixel vals */
 WHERE int            fc2pcol[256]; /* maps freecols into pic pixel values */
 WHERE int            numcols;      /* # of desired colors in picture */
+#ifdef MACBINARY
+WHERE char           macb_file;    /* True if this file type is MacBinary */
+WHERE int            handlemacb;   /* True if we want to handle MacBinary */
+#endif
+#if defined(HAVE_PIC) || defined(HAVE_PIC2)
+WHERE int            nopicadjust;  /* True if we don't want to adjust aspect */
+#endif
+#ifdef HAVE_PIC2
+WHERE int            pic2split;    /* True if we want to split multiblocks */
+#endif
+#ifdef VS_ADJUST
+WHERE int            vsadjust; /* True if we want to adjust aspect of icons */
+#endif
+#ifdef HAVE_MGCSFX
+WHERE int            mgcsfx;    /* True if we want to force use MgcSfx */
+WHERE int            nomgcsfx;  /* True if we don't want to use MgcSfx */
+#endif
 
 /* Std Cmap stuff */
 WHERE byte           stdr[256], stdg[256], stdb[256];  /* std 3/3/2 cmap */
@@ -1083,42 +1237,47 @@ WHERE int           bwidth,        /* border width of created windows */
                     noFreeCols,    /* don't free colors when loading new pic */
                     autoquit,      /* quit in '-root' or when click on win */
                     xerrcode,      /* errorcode of last X error */
-                    grabDelay;     /* # of seconds to sleep at start of Grab */
+                    grabDelay,     /* # of seconds to sleep at start of Grab */
+                    startGrab;     /* start immediate grab ? */
 
 WHERE int           state824;      /* displays warning when going 8->24 */
 
 WHERE float         defaspect,     /* default aspect ratio to use */
                     normaspect;    /* normal aspect ratio of this picture */
 
-WHERE unsigned long rootbg, rootfg;   /* fg/bg for root border */
-WHERE int           waitsec;          /* secs btwn pics. -1=wait for event */
-WHERE int           waitloop;         /* loop at end of slide show? */
-WHERE int           automax;          /* maximize pic on open */
-WHERE int           rootMode;         /* mode used for -root images */
+WHERE u_long        rootbg, rootfg; /* fg/bg for root border */
+WHERE u_short       imagebgR;
+WHERE u_short       imagebgG;      /* GRR 19980308:  bg for transpar. images */
+WHERE u_short       imagebgB;
+WHERE int           have_imagebg;
+WHERE double        waitsec;       /* secs btwn pics. -1.0=wait for event */
+WHERE int           waitloop;      /* loop at end of slide show? */
+WHERE int           automax;       /* maximize pic on open */
+WHERE int           rootMode;      /* mode used for -root images */
 
-WHERE int           nostat;           /* if true, don't stat() in LdCurDir */
+WHERE int           nostat;        /* if true, don't stat() in LdCurDir */
 
-WHERE int           ctrlColor;        /* whether or not to use colored butts */
+WHERE int           ctrlColor;     /* whether or not to use colored butts */
 
-WHERE char         *def_str;          /* used by rd_*() routines */
+WHERE char         *def_str;       /* used by rd_*() routines */
 WHERE int           def_int;
-WHERE char         *tmpdir;           /* equal to "/tmp" or $TMPDIR env var */
-WHERE Pixmap        gray25Tile,       /* used for 3d effect on 1-bit disp's */
+WHERE char         *tmpdir;        /* equal to "/tmp" or $TMPDIR env var */
+WHERE Pixmap        gray25Tile,    /* used for 3d effect on 1-bit disp's */
                     gray50Tile;
-WHERE int           autoDelete;       /* delete cmd-line files on exit? */
+WHERE int           autoDelete;    /* delete cmd-line files on exit? */
 
 #define PRINTCMDLEN 256
 WHERE char          printCmd[PRINTCMDLEN];
 
 /* stuff used for 'info' box */
 WHERE Window        infoW;
-WHERE int           infoUp;       /* boolean:  whether infobox is visible */
+WHERE int           infoUp;        /* boolean:  whether infobox is visible */
 WHERE int           infoMode;
 
 
 /* stuff used for 'ctrl' box */
 WHERE Window        ctrlW;
-WHERE int           ctrlUp;       /* boolean:  whether ctrlbox is visible */
+WHERE int           ctrlUp;        /* boolean:  whether ctrlbox is visible */
 WHERE char         *namelist[MAXNAMES];  /* list of file names from argv */
 WHERE char         *origlist[MAXNAMES];  /* only names from argv (autoDelete)*/
 WHERE int           orignumnames;
@@ -1157,23 +1316,28 @@ WHERE int           cmapInGam;
 
 
 /* stuff used for 'browse' box */
-WHERE int           anyBrowUp;            /* whether *any* browser visible */
+WHERE int           anyBrowUp;              /* whether *any* browser visible */
 
 /* stuff used for textview windows */
-WHERE int           anyTextUp;            /* are any text windows visible? */
-WHERE int           commentUp;            /* comment window up? */
+WHERE int           anyTextUp;              /* are any text windows visible? */
+WHERE int           commentUp;              /* comment window up? */
 
 /* stuff used for xvcut.c */
-WHERE int           forceClipFile;        /* don't use property clipboard */
-WHERE int           clearR, clearG, clearB;  /* clear color in 24-bit mode */
+WHERE int           forceClipFile;          /* don't use property clipboard */
+WHERE int           clearR, clearG, clearB; /* clear color in 24-bit mode */
 
 
 /* stuff used for 'ps' box */
 WHERE Window        psW;
-WHERE int           psUp;       /* is psW mapped, or what? */
+WHERE int           psUp;         /* is psW mapped, or what? */
 WHERE CBUTT         encapsCB, pscompCB;
 WHERE char         *gsDev, *gsGeomStr;
 WHERE int           gsRes;
+
+
+/* stuff used for 'pcd' box */
+WHERE Window        pcdW;
+WHERE int           pcdUp;        /* is pcdW mapped, or what? */
 
 
 #ifdef HAVE_JPEG
@@ -1190,6 +1354,91 @@ WHERE int           tiffUp;       /* is tiffW mapped, or what? */
 #endif
 
 
+#ifdef HAVE_PNG
+/* stuff used for 'png' box */
+WHERE Window        pngW;
+WHERE int           pngUp;        /* is pngW mapped, or what? */
+#endif
+
+
+#ifdef ENABLE_FIXPIX_SMOOTH
+WHERE int           do_fixpix_smooth;  /* GRR 19980607: runtime FS dithering */
+#endif
+
+#ifdef HAVE_PIC2
+/* stuff used for 'pic2' box */
+WHERE Window        pic2W;
+WHERE int           pic2Up;      /* is pic2W mapped, or what? */
+#endif /* HAVE_PIC2 */
+
+#ifdef HAVE_PCD
+/* stuff used for 'pcd' box */
+WHERE Window        pcdW;
+WHERE int           pcdUp;       /* is pcdW mapped, or what? */
+#endif /* HAVE_PCD */
+
+#ifdef HAVE_MGCSFX
+/* stuff used for 'mgcsfx' box */
+WHERE Window        mgcsfxW;
+WHERE Window        mgcsfxNameW;
+WHERE int           mgcsfxUp;      /* is mgcsfxW mapped, or what? */
+#endif /* HAVE_MGCSFX */
+
+#ifdef TV_L10N
+/* stuff used for TextViewer Japanization */
+#  define LOCALE_USASCII    0
+#  define LOCALE_EUCJ       1
+#  define LOCALE_JIS        2
+#  define LOCALE_MSCODE     3
+
+#  ifndef LOCALE_DEFAULT
+#    define LOCALE_DEFAULT  0
+#  endif /* !LOCALE_DEFAULT */
+
+#  ifndef MAIN
+     extern char *localeList[];
+#  else
+#    ifndef LOCALE_NAME_EUC
+#      ifndef X_LOCALE
+#        if defined(__FreeBSD__)
+	   char *localeList[] = {"", "ja_JP.EUC", "none", "none"};
+#        elif defined(__linux__)
+	   char *localeList[] = {"", "ja_JP.eucJP", "none", "ja_JP.SJIS"};
+#        elif defined(__sun) || defined(sun)
+	   char *localeList[] = {"", "ja", "none", "none"};
+#        elif defined(__sgi)	/* sgi, __sgi, __sgi__ (gcc) */
+	   char *localeList[] = {"", "ja_JP.EUC", "none", "none"};
+#        elif defined(sony_news)
+	   char *localeList[] = {"", "ja_JP.EUC", "none", "ja_JP.SJIS"};
+#        elif defined(nec)
+	   char *localeList[] = {"", "japan", "none", "none"};
+#        elif defined(__hpux)
+	   char *localeList[] = {"", "japanese.euc", "none", "japanese"};
+#        elif defined(__osf__)
+	   char *localeList[] = {"", "ja_JP.deckanji", "none", "ja_JP.SJIS"};
+#        elif defined(_AIX)
+	   char *localeList[] = {"", "ja_JP", "none", "Ja_JP" };
+#        elif defined(__bsdi)
+	   char *localeList[] = {"", "Japanese-EUC", "none", "none" };
+#        else
+	   char *localeList[] = {"", "ja_JP.EUC", "ja_JP.JIS", "ja_JP.SJIS"};
+#        endif
+#      else
+#        if (XlibSpecificationRelease > 5)
+           char *localeList[] = {"", "ja_JP.eucJP", "ja_JP.JIS7",
+				 "ja_JP.SJIS"};
+#        else
+           char *localeList[] = {"", "ja_JP.ujis", "ja_JP.jis7",
+				 "ja_JP.mscode"};
+#        endif
+#      endif /* X_LOCALE */
+#    else
+       char *localeList[] = {"", LOCALE_NAME_EUC,
+			     LOCALE_NAME_JIS, LOCALE_NAME_MSCODE};
+#    endif /* LOCALE_NAME_EUC */
+#  endif /* MAIN */
+#endif /* TV_L10N */
+
 #undef WHERE
 
 
@@ -1199,8 +1448,11 @@ WHERE int           tiffUp;       /* is tiffW mapped, or what? */
 /****************************** XV.C ****************************/
 int   ReadFileType      PARM((char *));
 int   ReadPicFile       PARM((char *, int, PICINFO *, int));
-int   UncompressFile    PARM((char *, char *));
+int   UncompressFile    PARM((char *, char *, int));
 void  KillPageFiles     PARM((char *, int));
+#ifdef MACBINARY
+int   RemoveMacbinary   PARM((char *, char *));
+#endif
 
 void NewPicGetColors    PARM((int, int));
 void FixAspect          PARM((int, int *, int *));
@@ -1429,6 +1681,9 @@ void InitPoll              PARM((void));
 int  CheckPoll             PARM((int));
 void DIRDeletedFile        PARM((char *));
 void DIRCreatedFile        PARM((char *));
+FILE *pic2_OpenOutFile     PARM((char *, int *));
+void pic2_KillNullFile     PARM((FILE *));
+int  OpenOutFileDesc       PARM((char *));
 
 
 /*************************** XVBROWSE.C ************************/
@@ -1448,7 +1703,7 @@ void BRCreatedFile         PARM((char *));
 
 /*************************** XVTEXT.C ************************/
 void CreateTextWins        PARM((char *, char *));
-void TextView              PARM((char *));
+int  TextView              PARM((char *));
 void OpenTextView          PARM((char *, int, char *, int));
 
 void OpenCommentText       PARM((void));
@@ -1466,6 +1721,8 @@ void KillTextWindows       PARM((void));
 int  TextCheckEvent        PARM((XEvent *, int *, int *));
 int  TextDelWin            PARM((Window));
 
+int  CharsetCheckEvent     PARM((XEvent *));
+int  CharsetDelWin         PARM((Window));
 
 
 /**************************** XVGAM.C **************************/
@@ -1502,12 +1759,12 @@ void SCTrack               PARM((SCRL *, int, int));
 
 
 /*************************** XVDIAL.C ***************************/
-void DCreate               PARM((DIAL *, Window, int, int, int, int, int,
-				 int, int, int, u_long, u_long, u_long,
-				 u_long, char *, char *));
+void DCreate               PARM((DIAL *, Window, int, int, int, int, double,
+                                 double, double, double, double, u_long,
+                                 u_long, u_long, u_long, char *, char *));
 
-void DSetRange             PARM((DIAL *, int, int, int, int));
-void DSetVal               PARM((DIAL *, int));
+void DSetRange             PARM((DIAL *, double,double,double,double,double));
+void DSetVal               PARM((DIAL *, double));
 void DSetActive            PARM((DIAL *, int));
 void DRedraw               PARM((DIAL *));
 int  DTrack                PARM((DIAL *, int, int));
@@ -1585,7 +1842,11 @@ int WritePM                PARM((FILE *, byte *, int, int, int, byte *,
 				 byte *, byte *, int, int, char *));
 
 /**************************** XVPBM.C ***************************/
+#ifdef HAVE_MGCSFX
+int LoadPBM                PARM((char *, PICINFO *, int));
+#else
 int LoadPBM                PARM((char *, PICINFO *));
+#endif
 int WritePBM               PARM((FILE *, byte *, int, int, int, byte *,
 				 byte *, byte *, int, int, int, char *));
 
@@ -1602,6 +1863,11 @@ int WriteSunRas            PARM((FILE *, byte *, int, int, int, byte *,
 /**************************** XVBMP.C ***************************/
 int LoadBMP                PARM((char *, PICINFO *));
 int WriteBMP               PARM((FILE *, byte *, int, int, int, byte *,
+				 byte *, byte *, int, int));
+
+/**************************** XVWBMP.C ***************************/
+int LoadWBMP               PARM((char *, PICINFO *));
+int WriteWBMP              PARM((FILE *, byte *, int, int, int, byte *,
 				 byte *, byte *, int, int));
 
 /**************************** XVRLE.C ***************************/
@@ -1642,6 +1908,7 @@ void CreateJPEGW           PARM((void));
 void JPEGDialog            PARM((int));
 int  JPEGCheckEvent        PARM((XEvent *));
 void JPEGSaveParams        PARM((char *, int));
+void VersionInfoJPEG       PARM((void));		/* GRR 19980605 */
 
 /**************************** XVTIFF.C ***************************/
 int   LoadTIFF             PARM((char *, PICINFO *, int));
@@ -1649,6 +1916,15 @@ void  CreateTIFFW          PARM((void));
 void  TIFFDialog           PARM((int));
 int   TIFFCheckEvent       PARM((XEvent *));
 void  TIFFSaveParams       PARM((char *, int));
+void  VersionInfoTIFF      PARM((void));		/* GRR 19980605 */
+
+/**************************** XVPNG.C ***************************/
+int  LoadPNG               PARM((char *, PICINFO *));
+void CreatePNGW            PARM((void));
+void PNGDialog             PARM((int));
+int  PNGCheckEvent         PARM((XEvent *));
+void PNGSaveParams         PARM((char *, int));
+void VersionInfoPNG        PARM((void));		/* GRR 19980605 */
 
 /**************************** XVPDS.C ***************************/
 int LoadPDS                PARM((char *, PICINFO *));
@@ -1660,6 +1936,87 @@ int   PSCheckEvent         PARM((XEvent *));
 void  PSSaveParams         PARM((char *, int));
 void  PSResize             PARM((void));
 int   LoadPS               PARM((char *, PICINFO *, int));
+
+/************************ [JCE] XVZX.C ***************************/
+
+int LoadZX                 PARM((char *, PICINFO *));
+int WriteZX                PARM((FILE *, byte *, int, int, int, byte *,
+				 byte *, byte *, int, int, char *));
+
+/**************************** XVPCD.C ***************************/
+int   LoadPCD              PARM((char *, PICINFO *, int));
+void  CreatePCDW           PARM((void));
+void  PCDDialog            PARM((int));
+int   PCDCheckEvent        PARM((XEvent *));
+void  PCDSetParamOptions   PARM((char *));
+
+/*************************** XVMAG.C ***************************/
+int   LoadMAG              PARM((char *, PICINFO *));
+int   WriteMAG             PARM((FILE *, byte *, int, int, int,
+				 byte *, byte *, byte *, int, int, char *));
+
+/*************************** XVMAKI.C ***************************/
+int   LoadMAKI             PARM((char *, PICINFO *));
+int   WriteMAKI            PARM((FILE *, byte *, int, int, int,
+				 byte *, byte *, byte *, int, int));
+
+/*************************** XVPIC.C ***************************/
+int   LoadPIC              PARM((char *, PICINFO *));
+int   WritePIC             PARM((FILE *, byte *, int, int, int,
+				 byte *, byte *, byte *, int, int, char *));
+
+/*************************** XVPI.C ***************************/
+int   LoadPi               PARM((char *, PICINFO *));
+int   WritePi              PARM((FILE *, byte *, int, int, int,
+				 byte *, byte *, byte *, int, int, char *));
+
+/*************************** XVPIC2.C ***************************/
+int   LoadPIC2             PARM((char *, PICINFO *, int));
+void  CreatePIC2W          PARM((void));
+void  PIC2Dialog           PARM((int));
+int   PIC2CheckEvent       PARM((XEvent *));
+int   PIC2SetParamOptions  PARM((char *));
+
+/**************************** XVPCD.C ***************************/
+int   LoadPCD              PARM((char *, PICINFO *,int));
+void  CreatePCDW           PARM((void));
+void  PCDDialog            PARM((int));
+int   PCDCheckEvent        PARM((XEvent *));
+void  PCDSetParamOptions   PARM((char *));
+
+/**************************** XVHIPS.C ***************************/
+int   LoadHIPS             PARM((char *, PICINFO *));
+
+/*************************** XVMGCSFX.C ***************************/
+int   is_mgcsfx             PARM((char *, unsigned char *, int));
+char *mgcsfx_auto_input_com PARM((char *));
+int   LoadMGCSFX            PARM((char *, PICINFO *));
+void  CreateMGCSFXW         PARM((void));
+void  MGCSFXDialog          PARM((int));
+int   MGCSFXCheckEvent      PARM((XEvent *));
+int   MGCSFXSaveParams      PARM((char *, int));
+
+int getInputCom             PARM((void));
+int getOutputCom            PARM((void));
+
+/**************************** XVVD.C ****************************/
+void  Vdinit               PARM((void));
+void  Vdsettle             PARM((void));
+int   Chvdir               PARM((char *));
+void  Dirtovd              PARM((char *));
+void  Vdtodir              PARM((char *));
+void  Dirtosubst           PARM((char *));
+int   Mkvdir               PARM((char *));
+void  Mkvdir_force         PARM((char *));
+int   Rmvdir               PARM((char *));
+int   Movevdir             PARM((char *, char *));
+int   Isarchive            PARM((char *));
+int   Isvdir               PARM((char *));
+void  vd_HUPhandler        PARM((void));
+void  vd_handler           PARM((int));
+int   vd_Xhandler          PARM((Display *, XErrorEvent *));
+int   vd_XIOhandler        PARM((Display *));
+void  vd_handler_setup     PARM((void));
 
 /*************************** XVPOPUP.C ***************************/
 void  CenterMapWindow      PARM((Window, int, int, int, int));
@@ -1714,3 +2071,13 @@ void CoordC2P              PARM((int, int, int *, int *));
 void CoordP2E              PARM((int, int, int *, int *));
 void CoordE2P              PARM((int, int, int *, int *));
 
+#if defined(__mips) && defined(__SYSTYPE_BSD43)
+#  define strstr(A,B) pds_strstr((A),(B))
+#  undef S_IFIFO
+#endif /* !mips_bsd */
+
+#ifndef SEEK_SET
+#  define SEEK_SET 0
+#  define SEEK_CUR 1
+#  define SEEK_END 2
+#endif

@@ -86,6 +86,9 @@ static int WriteTIFF(fp,pic,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle,
       TIFFSetField(tif, TIFFTAG_GROUP3OPTIONS,
 	  GROUP3OPT_2DENCODING+GROUP3OPT_FILLBITS);
 
+  if (comp == COMPRESSION_LZW)
+      TIFFSetField(tif, TIFFTAG_PREDICTOR, 2);
+
   TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
   TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
   TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
