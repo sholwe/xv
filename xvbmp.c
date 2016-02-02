@@ -14,7 +14,7 @@
    rest of the pic is filled with 0's.
 
    a file with garbage characters in it is an unloadable file.  All allocated
-   stuff is tossed, and LoadPBM returns non-zero
+   stuff is tossed, and LoadBMP returns non-zero
 
    not being able to malloc is a Fatal Error.  The program is aborted. */
 
@@ -54,9 +54,9 @@ int LoadBMP(fname, pinfo)
 {
   FILE         *fp;
   int          i, c, c1, rv;
-  unsigned int bfSize, bfOffBits, biSize, biWidth, biHeight, biPlanes;
-  unsigned int biBitCount, biCompression, biSizeImage, biXPelsPerMeter;
-  unsigned int biYPelsPerMeter, biClrUsed, biClrImportant;
+  u_int        bfSize, bfOffBits, biSize, biWidth, biHeight, biPlanes;
+  u_int        biBitCount, biCompression, biSizeImage, biXPelsPerMeter;
+  u_int        biYPelsPerMeter, biClrUsed, biClrImportant;
   int bPad;
   char         *cmpstr;
   byte         *pic24, *pic8;
@@ -69,7 +69,7 @@ int LoadBMP(fname, pinfo)
 
   fp = xv_fopen(fname,"r");
   if (!fp) return (bmpError(bname, "couldn't open file"));
-  
+
   fseek(fp, 0L, 2);      /* figure out the file size */
   filesize = ftell(fp);
   fseek(fp, 0L, 0);
@@ -104,11 +104,11 @@ int LoadBMP(fname, pinfo)
     biHeight        = getshort(fp);
     biPlanes        = getshort(fp);
     biBitCount      = getshort(fp);
-    
+
     /* Not in old versions so have to compute them*/
     biSizeImage = (((biPlanes * biBitCount*biWidth)+31)/32)*4*biHeight;
-    
-    biCompression   = BI_RGB; 
+
+    biCompression   = BI_RGB;
     biXPelsPerMeter = biYPelsPerMeter = 0;
     biClrUsed       = biClrImportant  = 0;
   }
@@ -127,11 +127,14 @@ int LoadBMP(fname, pinfo)
 
 
   /* error checking */
-  if ((biBitCount!=1 && biBitCount!=4 && biBitCount!=8 && biBitCount!=24) || 
-      biPlanes!=1 || biCompression>BI_RLE4) {
+  if ((biBitCount!=1 && biBitCount!=4 && biBitCount!=8 && biBitCount!=24) ||
+      biPlanes!=1 || biCompression>BI_RLE4 ||
+      biWidth<=0 || biHeight<=0 ||
+      (biClrUsed && biClrUsed > (1 << biBitCount))) {
 
-    sprintf(buf,"Bogus BMP File!  (bitCount=%d, Planes=%d, Compression=%d)",
-	    biBitCount, biPlanes, biCompression);
+    sprintf(buf,
+	    "Bogus BMP File!  (%dx%d, Bits=%d, Colors=%d, Planes=%d, Compr=%d)",
+	    biWidth, biHeight, biBitCount, biClrUsed, biPlanes, biCompression);
 
     bmpError(bname, buf);
     goto ERROR;
@@ -154,13 +157,18 @@ int LoadBMP(fname, pinfo)
     /* skip ahead to colormap, using biSize */
     c = biSize - 40;    /* 40 bytes read from biSize to biClrImportant */
     for (i=0; i<c; i++) getc(fp);
-    
+
     bPad = bfOffBits - (biSize + 14);
   }
 
   /* load up colormap, if any */
   if (biBitCount!=24) {
     int i, cmaplen;
+
+/* this is superfluous; see identical test in "error checking" block above
+  if (biClrUsed > (1 << biBitCount))
+    biClrUsed = (1 << biBitCount);
+ */
 
     cmaplen = (biClrUsed) ? biClrUsed : 1 << biBitCount;
     for (i=0; i<cmaplen; i++) {
@@ -173,7 +181,7 @@ int LoadBMP(fname, pinfo)
       }
     }
 
-    if (FERROR(fp)) 
+    if (FERROR(fp))
       { bmpError(bname,"EOF reached in BMP colormap"); goto ERROR; }
 
     if (DEBUG>1) {
@@ -188,7 +196,7 @@ int LoadBMP(fname, pinfo)
   if (biSize != WIN_OS2_OLD) {
     /* Waste any unused bytes between the colour map (if present)
        and the start of the actual bitmap data. */
-    
+
     while (bPad > 0) {
       (void) getc(fp);
       bPad--;
@@ -198,11 +206,21 @@ int LoadBMP(fname, pinfo)
   /* create pic8 or pic24 */
 
   if (biBitCount==24) {
-    pic24 = (byte *) calloc((size_t) biWidth * biHeight * 3, (size_t) 1);
+    u_int npixels = biWidth * biHeight;
+    u_int count = 3 * npixels;
+
+    if (biWidth == 0 || biHeight == 0 || npixels/biWidth != biHeight ||
+        count/3 != npixels)
+      return (bmpError(bname, "image dimensions too large"));
+    pic24 = (byte *) calloc((size_t) count, (size_t) 1);
     if (!pic24) return (bmpError(bname, "couldn't malloc 'pic24'"));
   }
   else {
-    pic8 = (byte *) calloc((size_t) biWidth * biHeight, (size_t) 1);
+    u_int npixels = biWidth * biHeight;
+
+    if (biWidth == 0 || biHeight == 0 || npixels/biWidth != biHeight)
+      return (bmpError(bname, "image dimensions too large"));
+    pic8 = (byte *) calloc((size_t) npixels, (size_t) 1);
     if (!pic8) return(bmpError(bname, "couldn't malloc 'pic8'"));
   }
 
@@ -216,7 +234,7 @@ int LoadBMP(fname, pinfo)
 					  biCompression);
   else                      rv = loadBMP24(fp,pic24,biWidth,biHeight);
 
-  if (rv) bmpError(bname, "File appears truncated.  Winging it.\n");
+  if (rv) bmpError(bname, "File appears truncated.  Winging it.");
 
   fclose(fp);
 
@@ -254,7 +272,7 @@ int LoadBMP(fname, pinfo)
  ERROR:
   fclose(fp);
   return 0;
-}  
+}
 
 
 /*******************************************/
@@ -277,7 +295,7 @@ static int loadBMP1(fp, pic8, w, h)
 	c = getc(fp);
 	bitnum = 0;
       }
-      
+
       if (j<w) {
 	*pp++ = (c & 0x80) ? 1 : 0;
 	c <<= 1;
@@ -287,7 +305,7 @@ static int loadBMP1(fp, pic8, w, h)
   }
 
   return (FERROR(fp));
-}  
+}
 
 
 
@@ -299,24 +317,24 @@ static int loadBMP4(fp, pic8, w, h, comp)
 {
   int   i,j,c,c1,x,y,nybnum,padw,rv;
   byte *pp;
-  
-  
+
+
   rv = 0;
   c = c1 = 0;
-  
+
   if (comp == BI_RGB) {   /* read uncompressed data */
     padw = ((w + 7)/8) * 8; /* 'w' padded to a multiple of 8pix (32 bits) */
-    
+
     for (i=h-1; i>=0; i--) {
       pp = pic8 + (i * w);
       if ((i&0x3f)==0) WaitCursor();
-      
+
       for (j=nybnum=0; j<padw; j++,nybnum++) {
 	if ((nybnum & 1) == 0) { /* read next byte */
 	  c = getc(fp);
 	  nybnum = 0;
 	}
-	
+
 	if (j<w) {
 	  *pp++ = (c & 0xf0) >> 4;
 	  c <<= 4;
@@ -325,55 +343,55 @@ static int loadBMP4(fp, pic8, w, h, comp)
       if (FERROR(fp)) break;
     }
   }
-  
+
   else if (comp == BI_RLE4) {  /* read RLE4 compressed data */
-    x = y = 0;  
+    x = y = 0;
     pp = pic8 + x + (h-y-1)*w;
-    
+
     while (y<h) {
       c = getc(fp);  if (c == EOF) { rv = 1;  break; }
-      
+
       if (c) {                                   /* encoded mode */
 	c1 = getc(fp);
-	for (i=0; i<c; i++,x++,pp++) 
+	for (i=0; i<c; i++,x++,pp++)
 	  *pp = (i&1) ? (c1 & 0x0f) : ((c1>>4)&0x0f);
       }
-      
+
       else {    /* c==0x00  :  escape codes */
 	c = getc(fp);  if (c == EOF) { rv = 1;  break; }
-	
+
 	if      (c == 0x00) {                    /* end of line */
 	  x=0;  y++;  pp = pic8 + x + (h-y-1)*w;
-	} 
-	
+	}
+
 	else if (c == 0x01) break;               /* end of pic8 */
-	
+
 	else if (c == 0x02) {                    /* delta */
 	  c = getc(fp);  x += c;
 	  c = getc(fp);  y += c;
 	  pp = pic8 + x + (h-y-1)*w;
 	}
-	
+
 	else {                                   /* absolute mode */
 	  for (i=0; i<c; i++, x++, pp++) {
 	    if ((i&1) == 0) c1 = getc(fp);
 	    *pp = (i&1) ? (c1 & 0x0f) : ((c1>>4)&0x0f);
 	  }
-	  
+
 	  if (((c&3)==1) || ((c&3)==2)) getc(fp);  /* read pad byte */
 	}
       }  /* escape processing */
       if (FERROR(fp)) break;
     }  /* while */
   }
-  
+
   else {
     fprintf(stderr,"unknown BMP compression type 0x%0x\n", comp);
   }
-  
+
   if (FERROR(fp)) rv = 1;
   return rv;
-}  
+}
 
 
 
@@ -385,7 +403,7 @@ static int loadBMP8(fp, pic8, w, h, comp)
 {
   int   i,j,c,c1,padw,x,y,rv;
   byte *pp;
-  
+
   rv = 0;
 
   if (comp == BI_RGB) {   /* read uncompressed data */
@@ -404,7 +422,7 @@ static int loadBMP8(fp, pic8, w, h, comp)
   }
 
   else if (comp == BI_RLE8) {  /* read RLE8 compressed data */
-    x = y = 0;  
+    x = y = 0;
     pp = pic8 + x + (h-y-1)*w;
 
     while (y<h) {
@@ -420,7 +438,7 @@ static int loadBMP8(fp, pic8, w, h, comp)
 
 	if      (c == 0x00) {                    /* end of line */
 	  x=0;  y++;  pp = pic8 + x + (h-y-1)*w;
-	} 
+	}
 
 	else if (c == 0x01) break;               /* end of pic8 */
 
@@ -435,21 +453,21 @@ static int loadBMP8(fp, pic8, w, h, comp)
 	    c1 = getc(fp);
 	    *pp = c1;
 	  }
-	  
+
 	  if (c & 1) getc(fp);  /* odd length run: read an extra pad byte */
 	}
       }  /* escape processing */
       if (FERROR(fp)) break;
     }  /* while */
   }
-  
+
   else {
     fprintf(stderr,"unknown BMP compression type 0x%0x\n", comp);
   }
 
   if (FERROR(fp)) rv = 1;
   return rv;
-}  
+}
 
 
 
@@ -469,7 +487,7 @@ static int loadBMP24(fp, pic24, w, h)
   for (i=h-1; i>=0; i--) {
     pp = pic24 + (i * w * 3);
     if ((i&0x3f)==0) WaitCursor();
-    
+
     for (j=0; j<w; j++) {
       pp[2] = getc(fp);   /* blue */
       pp[1] = getc(fp);   /* green */
@@ -484,30 +502,30 @@ static int loadBMP24(fp, pic24, w, h)
   }
 
   return rv;
-}  
+}
 
 
 
 /*******************************************/
-static unsigned int getshort(fp)
+static u_int getshort(fp)
      FILE *fp;
 {
   int c, c1;
   c = getc(fp);  c1 = getc(fp);
-  return ((unsigned int) c) + (((unsigned int) c1) << 8);
+  return ((u_int) c) + (((u_int) c1) << 8);
 }
 
 
 /*******************************************/
-static unsigned int getint(fp)
+static u_int getint(fp)
      FILE *fp;
 {
   int c, c1, c2, c3;
   c = getc(fp);  c1 = getc(fp);  c2 = getc(fp);  c3 = getc(fp);
-  return ((unsigned int) c) +
-         (((unsigned int) c1) << 8) + 
-	 (((unsigned int) c2) << 16) +
-	 (((unsigned int) c3) << 24);
+  return  ((u_int) c) +
+         (((u_int) c1) << 8) +
+	 (((u_int) c2) << 16) +
+	 (((u_int) c3) << 24);
 }
 
 
@@ -518,7 +536,7 @@ static void putshort(fp, i)
 {
   int c, c1;
 
-  c = ((unsigned int ) i) & 0xff;  c1 = (((unsigned int) i)>>8) & 0xff;
+  c = ((u_int) i) & 0xff;  c1 = (((u_int) i)>>8) & 0xff;
   putc(c, fp);   putc(c1,fp);
 }
 
@@ -529,10 +547,10 @@ static void putint(fp, i)
      int i;
 {
   int c, c1, c2, c3;
-  c  = ((unsigned int ) i)      & 0xff;  
-  c1 = (((unsigned int) i)>>8)  & 0xff;
-  c2 = (((unsigned int) i)>>16) & 0xff;
-  c3 = (((unsigned int) i)>>24) & 0xff;
+  c  =  ((u_int) i)      & 0xff;
+  c1 = (((u_int) i)>>8)  & 0xff;
+  c2 = (((u_int) i)>>16) & 0xff;
+  c3 = (((u_int) i)>>24) & 0xff;
 
   putc(c, fp);   putc(c1,fp);  putc(c2,fp);  putc(c3,fp);
 }
@@ -562,11 +580,11 @@ int WriteBMP(fp,pic824,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle)
    *    8-bit image
    * note that PIC24 and F_BWDITHER/F_REDUCED won't happen
    *
-   * if colorstyle == F_BWDITHER, it writes a 1-bit image 
+   * if colorstyle == F_BWDITHER, it writes a 1-bit image
    *
    */
 
-  int i,j, nc, nbits, bperlin, cmaplen;
+  int i,j, nc, nbits, bperlin, cmaplen, npixels;
   byte *graypic, *sp, *dp, graymap[256];
 
   nc = nbits = cmaplen = 0;
@@ -576,10 +594,16 @@ int WriteBMP(fp,pic824,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle)
     /* generate a faked 8-bit per pixel image with a grayscale cmap,
        so that it can just fall through existing 8-bit code */
 
-    graypic = (byte *) malloc((size_t) w*h);
+    npixels = w * h;
+    if (w <= 0 || h <= 0 || npixels/w != h) {
+      SetISTR(ISTR_WARNING, "image dimensions too large");
+      return -1;
+    }
+
+    graypic = (byte *) malloc((size_t) npixels);
     if (!graypic) FatalError("unable to malloc in WriteBMP()");
 
-    for (i=0,sp=pic824,dp=graypic; i<w*h; i++,sp+=3, dp++) {
+    for (i=0,sp=pic824,dp=graypic; i<npixels; i++,sp+=3, dp++) {
       *dp = MONO(sp[0],sp[1],sp[2]);
     }
 
@@ -611,7 +635,7 @@ int WriteBMP(fp,pic824,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle)
     for (i=0; i<numcols; i++) {
       /* see if color #i is a duplicate */
       for (j=0; j<i; j++) {
-	if (rmap[i] == rmap[j] && gmap[i] == gmap[j] && 
+	if (rmap[i] == rmap[j] && gmap[i] == gmap[j] &&
 	    bmap[i] == bmap[j]) break;
       }
 
@@ -689,13 +713,13 @@ int WriteBMP(fp,pic824,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle)
 #else
   if (!FERROR(fp)) return -1;
 #endif
-  
+
   return 0;
 }
 
 
-	  
-	  
+
+
 /*******************************************/
 static void writeBMP1(fp, pic8, w, h)
      FILE *fp;
@@ -708,7 +732,7 @@ static void writeBMP1(fp, pic8, w, h)
   padw = ((w + 31)/32) * 32;  /* 'w', padded to be a multiple of 32 */
 
   for (i=h-1; i>=0; i--) {
-    pp = pic8 + (i * w);  
+    pp = pic8 + (i * w);
     if ((i&0x3f)==0) WaitCursor();
 
     for (j=bitnum=c=0; j<=padw; j++,bitnum++) {
@@ -716,7 +740,7 @@ static void writeBMP1(fp, pic8, w, h)
 	putc(c,fp);
 	bitnum = c = 0;
       }
-      
+
       c <<= 1;
 
       if (j<w) {
@@ -724,7 +748,7 @@ static void writeBMP1(fp, pic8, w, h)
       }
     }
   }
-}  
+}
 
 
 
@@ -758,7 +782,7 @@ static void writeBMP4(fp, pic8, w, h)
       }
     }
   }
-}  
+}
 
 
 
@@ -768,7 +792,7 @@ static void writeBMP8(fp, pic8, w, h)
      byte *pic8;
      int  w,h;
 {
-  int   i,j,c,padw;
+  int   i,j,padw;
   byte *pp;
 
   padw = ((w + 3)/4) * 4; /* 'w' padded to a multiple of 4pix (32 bits) */
@@ -780,7 +804,7 @@ static void writeBMP8(fp, pic8, w, h)
     for (j=0; j<w; j++) putc(pc2nc[*pp++], fp);
     for ( ; j<padw; j++) putc(0, fp);
   }
-}  
+}
 
 
 /*******************************************/
@@ -789,7 +813,7 @@ static void writeBMP24(fp, pic24, w, h)
      byte *pic24;
      int  w,h;
 {
-  int   i,j,c,padb;
+  int   i,j,padb;
   byte *pp;
 
   padb = (4 - ((w*3) % 4)) & 0x03;  /* # of pad bytes to write at EOscanline */
@@ -807,7 +831,7 @@ static void writeBMP24(fp, pic24, w, h)
 
     for (j=0; j<padb; j++) putc(0, fp);
   }
-}  
+}
 
 
 

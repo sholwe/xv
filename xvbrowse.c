@@ -1,6 +1,6 @@
 /*
  *  xvbrowse.c  -  visual schnauzer routines
- * 
+ *
  *  includes:
  *      void CreateBrowse(char *, char *, char *, char *, char *);
  *      void OpenBrowse();
@@ -34,7 +34,7 @@ typedef unsigned int mode_t;  /* file mode bits */
 #include "bits/br_sock"
 #include "bits/br_fifo"
 #include "bits/br_error"
-#include "bits/br_unknown"
+/* #include "bits/br_unknown"	commented out (near line 492) */
 #include "bits/br_cmpres"
 
 #include "bits/br_gif"
@@ -97,7 +97,7 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define BF_MAX      28    /* # of built-in icons */
 
 #define ISLOADABLE(ftyp) (ftyp!=BF_DIR  && ftyp!=BF_CHR && ftyp!=BF_BLK && \
-			  ftyp!=BF_SOCK && ftyp!=BF_FIFO) 
+			  ftyp!=BF_SOCK && ftyp!=BF_FIFO)
 
 #define DEF_BROWWIDE 615   /* default size of window */
 #define DEF_BROWHIGH 356
@@ -150,12 +150,12 @@ static char *showHstr = "Show hidden files";
 static char *hideHstr = "Hide 'hidden' files";
 
 static char *cmdMList[] = { "Change directory...\t^c",
-		            "Delete file(s)\t^d",  
-			    "New directory...\t^n",   
-			    "Rename file...\t^r",     
+		            "Delete file(s)\t^d",
+			    "New directory...\t^n",
+			    "Rename file...\t^r",
 			    "Rescan directory\t^s",
-			    "Update icons\t^u",    
-			    "Open new window\t^w", 
+			    "Update icons\t^u",
+			    "Open new window\t^w",
 			    "Generate icon(s)\t^g",
 			    "Select all files\t^a",
 			    "Text view\t^t",
@@ -260,7 +260,7 @@ static void computeScrlVals  PARM((BROWINFO *, int *, int *));
 static void genSelectedIcons PARM((BROWINFO *));
 static void genIcon          PARM((BROWINFO *, BFIL *));
 static void loadThumbFile    PARM((BROWINFO *, BFIL *));
-static void writeThumbFile   PARM((BROWINFO *, BFIL *, byte *, int, 
+static void writeThumbFile   PARM((BROWINFO *, BFIL *, byte *, int,
 				      int, char *));
 
 static void makeThumbDir     PARM((BROWINFO *));
@@ -284,7 +284,7 @@ static void rm_file          PARM((BROWINFO *, char *));
 static void rm_dir           PARM((BROWINFO *, char *));
 static void rm_dir1          PARM((BROWINFO *));
 
-static void dragFiles        PARM((BROWINFO *, BROWINFO *, char *, char *, 
+static void dragFiles        PARM((BROWINFO *, BROWINFO *, char *, char *,
 				   char *, char **, int, int));
 static int  moveFile         PARM((char *, char *));
 static int  copyFile         PARM((char *, char *));
@@ -369,8 +369,8 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
       if (gset & YNegative) gy1 = gy - i * 20;
 	               else gy1 = gy + i * 20;
 
-      if ((gset & WidthValue) && (gset & HeightValue)) 
-	sprintf(wgeom, "%dx%d%s%d%s%d", gw, gh, 
+      if ((gset & WidthValue) && (gset & HeightValue))
+	sprintf(wgeom, "%dx%d%s%d%s%d", gw, gh,
 		(gset & XNegative) ? "-" : "+", abs(gx1),
 		(gset & YNegative) ? "-" : "+", abs(gy1));
       else
@@ -402,11 +402,11 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
 
     /* note: everything is sized and positioned in ResizeBrowse() */
 
-    br->iconW = XCreateSimpleWindow(theDisp, br->win, 1,1, 100,100, 
+    br->iconW = XCreateSimpleWindow(theDisp, br->win, 1,1, 100,100,
 				     1,browfg,browbg);
     if (!br->iconW) FatalError("can't create schnauzer icon window!");
 
-    SCCreate(&(br->scrl), br->win, 0,0, 1,100, 0,0,0,0, 
+    SCCreate(&(br->scrl), br->win, 0,0, 1,100, 0,0,0,0,
 	     browfg, browbg, browhi, browlo, drawIconWin);
 
 
@@ -486,7 +486,7 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
   bfIcons[BF_SOCK]=MakePix1(br->win,br_sock_bits,br_sock_width,br_sock_height);
   bfIcons[BF_FIFO]=MakePix1(br->win,br_fifo_bits,br_fifo_width,br_fifo_height);
 
-  bfIcons[BF_ERROR]   = MakePix1(br->win, br_error_bits, 
+  bfIcons[BF_ERROR]   = MakePix1(br->win, br_error_bits,
 			       br_error_width,     br_error_height);
 
 /* bfIcons[BF_UNKNOWN] = MakePix1(br->win, br_unknown_bits,
@@ -501,9 +501,9 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
 
   bfIcons[BF_SUNRAS]  = MakePix1(br->win, br_sunras_bits,
 				 br_sunras_width, br_sunras_height);
-  bfIcons[BF_BMP]     = MakePix1(br->win,br_bmp_bits, 
+  bfIcons[BF_BMP]     = MakePix1(br->win,br_bmp_bits,
 				 br_bmp_width, br_bmp_height);
-  bfIcons[BF_UTAHRLE] = MakePix1(br->win, br_utahrle_bits, 
+  bfIcons[BF_UTAHRLE] = MakePix1(br->win, br_utahrle_bits,
 				 br_utahrle_width, br_utahrle_height);
 
   bfIcons[BF_IRIS]=MakePix1(br->win,br_iris_bits,br_iris_width,br_iris_height);
@@ -528,13 +528,13 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
 
   /* check that they all got built */
   for (i=0; i<BF_MAX && bfIcons[i]; i++);
-  if (i<BF_MAX) 
+  if (i<BF_MAX)
     FatalError("unable to create all built-in icons for schnauzer");
 
   for (i=0; i<MAXBRWIN; i++) {
     resizeBrowse(&binfo[i], DEF_BROWWIDE, DEF_BROWHIGH);
 
-    XSelectInput(theDisp, binfo[i].win, ExposureMask | ButtonPressMask | 
+    XSelectInput(theDisp, binfo[i].win, ExposureMask | ButtonPressMask |
 		 KeyPressMask | StructureNotifyMask);
   }
 
@@ -557,7 +557,7 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
     movecurs = XCreatePixmapCursor(theDisp,mcpix,fcmpix,&cursfg,&cursbg,13,13);
     copycurs = XCreatePixmapCursor(theDisp,ccpix,fcmpix,&cursfg,&cursbg,13,13);
     delcurs  = XCreatePixmapCursor(theDisp,dcpix,fcmpix,&cursbg,&cursfg,13,13);
-    if (!movecurs || !copycurs || !delcurs) 
+    if (!movecurs || !copycurs || !delcurs)
       FatalError("unable to create schnauzer cursors...");
   }
   else FatalError("unable to create schnauzer cursors...");
@@ -566,7 +566,7 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
   XFreePixmap(theDisp, ccpix);
   XFreePixmap(theDisp, dcpix);
   XFreePixmap(theDisp, fcmpix);
-    
+
 
   hasBeenSized = 1;  /* we can now start looking at browse events */
 }
@@ -586,11 +586,11 @@ void OpenBrowse()
     if (!br->vis) break;
   }
   if (i==MAXBRWIN) return;  /* full up: shouldn't happen */
-  
+
   anyBrowUp = 1;
   XMapRaised(theDisp, br->win);
   br->vis = 1;
-  
+
   freeBfList(br);
 
   /* see if some browser is pointing to the same path as CWD.  If so,
@@ -645,7 +645,7 @@ static void closeBrowse(br)
   /* free all info for this browse window */
   freeBfList(br);
   sprintf(br->path, BOGUSPATH);
-  
+
   /* turn on 'open new window' command doodads */
   windowMB.dim[WMB_BROWSE] = 0;
   for (i=0; i<MAXBRWIN; i++) {
@@ -739,8 +739,7 @@ static int brChkEvent(br, xev)
   /* checks event to see if it's a browse-window related thing.  If it
      is, it eats the event and returns '1', otherwise '0'. */
 
-  int    i, rv;
-  char buf[1024];
+  int    rv;
 
   rv = 1;
 
@@ -788,7 +787,7 @@ static int brChkEvent(br, xev)
 	fprintf(stderr,"grouped %d expose events into %d,%d %dx%d rect\n",
 		count, rect.x, rect.y, rect.width, rect.height);
       }
-      
+
       if      (e->window == br->win)   drawBrow(br);
 
       else if (e->window == br->iconW)
@@ -811,7 +810,7 @@ static int brChkEvent(br, xev)
       if      (e->window == br->win)      clickBrow(br,x,y);
       else if (e->window == br->scrl.win) SCTrack(&(br->scrl),x,y);
       else if (e->window == br->iconW) {
-	i = clickIconWin(br, x,y,(unsigned long) e->time, 
+	i = clickIconWin(br, x,y,(unsigned long) e->time,
 			 (e->state&ControlMask) || (e->state&ShiftMask));
 
       }
@@ -837,7 +836,7 @@ static int brChkEvent(br, xev)
 
       if (br->wide != e->width || br->high != e->height) {
 	if (DEBUG) fprintf(stderr,"Forcing a redraw!  (from configure)\n");
-	XClearArea(theDisp, br->win, 0, 0, 
+	XClearArea(theDisp, br->win, 0, 0,
 		   (u_int) e->width, (u_int) e->height, True);
 	resizeBrowse(br, e->width, e->height);
       }
@@ -877,7 +876,7 @@ static void resizeBrowse(br,w,h)
      int w,h;
 {
   XSizeHints hints;
-  int        i, minv, maxv, curv, page, maxh;
+  int        i, maxv, page, maxh;
 
   if (br->wide == w && br->high == h) return;  /* no change in size */
 
@@ -895,7 +894,7 @@ static void resizeBrowse(br,w,h)
   br->iwHigh = (maxh / ISPACE_HIGH) * ISPACE_HIGH;
   if (br->iwHigh < ISPACE_HIGH) br->iwHigh = ISPACE_HIGH;
 
-  XMoveResizeWindow(theDisp, br->iconW, LRMARGINS, TOPMARGIN, 
+  XMoveResizeWindow(theDisp, br->iconW, LRMARGINS, TOPMARGIN,
 		    (u_int) br->iwWide, (u_int) br->iwHigh);
 
 
@@ -907,11 +906,11 @@ static void resizeBrowse(br,w,h)
   for (i=0; i<BR_NBUTTS; i++) {
     /* 'close' always goes on right-most edge */
 
-    if (i<br->numbutshown) 
+    if (i<br->numbutshown)
       br->but[i].x = br->wide - (1+br->numbutshown-i) * (BUTTW+5);
     else if (i==BR_CLOSE)
       br->but[i].x = br->wide - (BUTTW+5);
-    else 
+    else
       br->but[i].x = br->wide + 10;    /* offscreen */
 
     br->but[i].y = br->high - BUTTH - 5;
@@ -928,11 +927,11 @@ static void resizeBrowse(br,w,h)
   br->numWide = br->iwWide / ISPACE_WIDE;
   br->visHigh = br->iwHigh / ISPACE_HIGH;
 
-  /* compute minv,maxv,curv,page values based on new current size */
+  /* compute maxv,page values based on new current size */
   computeScrlVals(br, &maxv, &page);
   if (br->scrl.val>maxv) br->scrl.val = maxv;
-  
-  SCChange(&br->scrl, LRMARGINS+br->iwWide+1, TOPMARGIN, 
+
+  SCChange(&br->scrl, LRMARGINS+br->iwWide+1, TOPMARGIN,
 	   1, br->iwHigh, 0, maxv, br->scrl.val, page);
 }
 
@@ -945,7 +944,7 @@ void SetBrowStr(str)
   /* put string in *all* browse windows */
   int i;
 
-  for (i=0; i<MAXBRWIN; i++) 
+  for (i=0; i<MAXBRWIN; i++)
     setBrowStr(&binfo[i], str);
 }
 
@@ -956,6 +955,7 @@ static void setBrowStr(br, str)
      char *str;
 {
   strncpy(br->dispstr, str, (size_t) 256);
+  br->dispstr[255] = '\0';
   drawBrowStr(br);
   XFlush(theDisp);
 }
@@ -992,7 +992,7 @@ void RegenBrowseIcons()
 
 	char tmp[64];
 
-	sprintf(tmp, "Re-coloring icons:  processed %d out of %d...", 
+	sprintf(tmp, "Re-coloring icons:  processed %d out of %d...",
 		i+1, br->bfLen);
 	setBrowStr(br, tmp);
       }
@@ -1011,14 +1011,14 @@ void BRDeletedFile(name)
 {
   /* called when file 'name' has been deleted.  If any of the browsers
      were showing the directory that the file was in, does a rescan() */
-  
+
   int  i;
   char buf[MAXPATHLEN + 2], *tmp;
 
   strcpy(buf, name);
   tmp = BaseName(buf);
   *tmp = '\0';     /* truncate after last '/' */
-  
+
   for (i=0; i<MAXBRWIN; i++) {
     if (strcmp(binfo[i].path, buf)==0) rescanDir(&binfo[i]);
   }
@@ -1070,9 +1070,9 @@ static void doCmd(br, cmd)
   case BR_GENICON: genSelectedIcons(br);  break;
 
   case BR_SELALL:  {
-                     int i;  char buf[128];
+                     int i;
 
-		     for (i=0; i<br->bfLen; i++) 
+		     for (i=0; i<br->bfLen; i++)
 		       br->bfList[i].lit = 1;
 		     br->numlit = br->bfLen;
 
@@ -1087,13 +1087,13 @@ static void doCmd(br, cmd)
                    break;
 
   case BR_TEXTVIEW: doTextCmd(br);       break;
- 
+
   case BR_QUIT:     Quit(0);             break;
 
   case BR_CLOSE:    closeBrowse(br);     break;
 
   case BR_HIDDEN:   br->showhidden = !br->showhidden;
-                    br->cmdMB.list[cmd] = (br->showhidden) 
+                    br->cmdMB.list[cmd] = (br->showhidden)
 		                              ? hideHstr : showHstr;
                     rescanDir(br);
                     break;
@@ -1137,16 +1137,16 @@ static void drawNumfiles(br)
 
   if (br->bfLen != 1) sprintf(foo, "%d files", br->bfLen);
   else strcpy(foo, "1 file");
-    
+
   XSetForeground(theDisp, theGC, browbg);
-  XFillRectangle(theDisp,br->win, theGC, x+1,y+1, 
+  XFillRectangle(theDisp,br->win, theGC, x+1,y+1,
 		 (u_int) StringWidth(foo)+6, (u_int) br->dirMB.h-1);
 
   XSetForeground(theDisp,theGC,browfg);
   XDrawRectangle(theDisp,br->win, theGC, x,y,
 		 (u_int) StringWidth(foo)+7, (u_int) br->dirMB.h);
 
-  Draw3dRect(br->win, x+1, y+1, (u_int) StringWidth(foo)+5, 
+  Draw3dRect(br->win, x+1, y+1, (u_int) StringWidth(foo)+5,
 	     (u_int) br->dirMB.h-2, R3D_IN, 2,  browhi, browlo, browbg);
 
   XSetForeground(theDisp,theGC,browfg);
@@ -1163,7 +1163,7 @@ static void eraseNumfiles(br,nf)
 
   if (nf != 1) sprintf(foo,"%d files",nf);
   else strcpy(foo,"1 file");
-    
+
   XClearArea(theDisp,br->win, 30, br->dirMB.y,
 	     (u_int) StringWidth(foo)+8, (u_int) br->dirMB.h+1, False);
 }
@@ -1185,13 +1185,13 @@ static void drawTrash(br)
 
   XSetForeground(theDisp,theGC,browfg);
   XDrawRectangle(theDisp,br->win, theGC, x,y, (u_int) w, (u_int) h);
-  Draw3dRect(br->win, x+1, y+1, (u_int) w-2, (u_int) h-2, 
+  Draw3dRect(br->win, x+1, y+1, (u_int) w-2, (u_int) h-2,
 	     R3D_IN, 2,  browhi, browlo, browbg);
 
   XSetForeground(theDisp,theGC,browfg);
   XSetBackground(theDisp,theGC,browbg);
-  XCopyPlane(theDisp, trashPix, br->win, theGC, 
-	     0,0,(u_int) br_trash_width, (u_int) br_trash_height, 
+  XCopyPlane(theDisp, trashPix, br->win, theGC,
+	     0,0,(u_int) br_trash_width, (u_int) br_trash_height,
 	     x+(w-br_trash_width)/2, y+(h-br_trash_height)/2,
 	     1L);
 }
@@ -1222,7 +1222,7 @@ static void drawBrowStr(br)
   y = br->high - (BUTTH+10) - (CHIGH + 6);
 
   XSetForeground(theDisp, theGC, browbg);
-  XFillRectangle(theDisp, br->win, theGC, 0, y+3, 
+  XFillRectangle(theDisp, br->win, theGC, 0, y+3,
 		 (u_int) br->wide, (u_int) CHIGH+1);
 
   XSetForeground(theDisp, theGC, browfg);
@@ -1277,7 +1277,7 @@ static void setSelInfoStr(br, sel)
 {
   /* sets the '# files selected' string in the brow window appropriately */
 
-  /* criteria:  
+  /* criteria:
    *    if no files are lit, display ''
    *    if 1 file is lit, pretend it was selected, fall through...
    *    if 1 or more files are lit
@@ -1316,7 +1316,7 @@ static void setSelInfoStr(br, sel)
 
 	else if (bf->ftype != BF_DIR) {     /* no info.  display file size */
 	  struct stat st;
-	      
+
 	  sprintf(buf, "%s%s", br->path, bf->name);  /* build filename */
 	  if (stat(buf, &st) == 0) {
 	    sprintf(buf, "%s:  %ld bytes", bf->name, st.st_size);
@@ -1360,8 +1360,8 @@ static void exposeIconWin(br, x,y,w,h)
       if (j>=0 && j < br->bfLen) drawIcon(br,j);
     }
   }
-      
-  Draw3dRect(br->iconW, 0, 0, (u_int) br->iwWide-1, (u_int) br->iwHigh-1, 
+
+  Draw3dRect(br->iconW, 0, 0, (u_int) br->iwWide-1, (u_int) br->iwHigh-1,
 	     R3D_IN, 2, browhi, browlo, browbg);
 }
 
@@ -1371,10 +1371,8 @@ static void drawIconWin(delta, sptr)
      int delta;
      SCRL *sptr;
 {
-  int   i,indx, x,y, ix,iy, num;
-  BFIL     *bf;
+  int   i,indx, num;
   BROWINFO *br;
-  char  tmpstr[64], *nstr;
 
   /* figure out BROWINFO pointer from SCRL pointer */
   for (i=0; i<MAXBRWIN; i++) {
@@ -1385,7 +1383,7 @@ static void drawIconWin(delta, sptr)
   br = &binfo[i];
 
   /* make sure we've been sized.  Necessary, as creating/modifying the
-     scrollbar calls this routine directly, rather than through 
+     scrollbar calls this routine directly, rather than through
      BrowseCheckEvent() */
 
   if (!hasBeenSized) return;
@@ -1413,12 +1411,12 @@ static void drawIconWin(delta, sptr)
 	if (y+h > br->iwHigh-4) h = (br->iwHigh-4)-y + 2;
       }
       XFillRectangle(theDisp, br->iconW, theGC, x, y, ISPACE_WIDE, (u_int) h);
-	
+
       if (indx>=0 && indx < br->bfLen) drawIcon(br, indx);
     }
   }
 
-  Draw3dRect(br->iconW, 0, 0, (u_int) br->iwWide-1, (u_int) br->iwHigh-1, 
+  Draw3dRect(br->iconW, 0, 0, (u_int) br->iwWide-1, (u_int) br->iwHigh-1,
 	     R3D_IN, 2, browhi, browlo, browbg);
 }
 
@@ -1431,7 +1429,10 @@ static void drawIcon(br, num)
 {
   int i,x,y,ix,iy,sw,sh,sx,sy;
   BFIL *bf;
-  char  tmpstr[64], fixedname[64], *nstr, *str;
+  char  tmpstr[64], *nstr, *str;
+#ifdef VMS
+  char  fixedname[64];
+#endif
 
 
   if (num<0 || num >= br->bfLen) return;
@@ -1463,12 +1464,12 @@ static void drawIcon(br, num)
   }
 
   else if (bf->ftype == BF_HAVEIMG && bf->ximage) {
-    XPutImage(theDisp, br->iconW, theGC, bf->ximage, 0,0, ix,iy, 
+    XPutImage(theDisp, br->iconW, theGC, bf->ximage, 0,0, ix,iy,
 	      (u_int) bf->w, (u_int) bf->h);
   }
 
   else {  /* shouldn't happen */
-    XDrawRectangle(theDisp, br->iconW, theGC, ix, iy, 
+    XDrawRectangle(theDisp, br->iconW, theGC, ix, iy,
 		   (u_int) bf->w, (u_int) bf->h);
   }
 
@@ -1488,24 +1489,25 @@ static void drawIcon(br, num)
 
   /* decide if the title is too big, and shorten if neccesary */
   if (StringWidth(str) > ISPACE_WIDE-6) {
-    int dotpos; 
+    int dotpos;
     strncpy(tmpstr, str, (size_t) 56);
+    tmpstr[56] = '\0'; /* MR: otherwise it dies on long file names */
     dotpos = strlen(tmpstr);
     strcat(tmpstr,"...");
 
     while(StringWidth(tmpstr) > ISPACE_WIDE-6 && dotpos>0) {
       /* change last non-dot char in tmpstr to a dot, and lop off
 	 last dot */
-	    
+
       dotpos--;
       tmpstr[dotpos] = '.';
       tmpstr[dotpos+3] = '\0';
     }
-    
+
     nstr = tmpstr;
   }
   else nstr = str;
-  
+
 
   /* draw the title */
   sw = StringWidth(nstr);
@@ -1516,12 +1518,12 @@ static void drawIcon(br, num)
 
   XSetForeground(theDisp, theGC,
 		 (bf->lit && bf->lit!=ICON_ONLY) ? browfg : browbg);
-  XFillRectangle(theDisp, br->iconW, theGC, sx, sy, 
+  XFillRectangle(theDisp, br->iconW, theGC, sx, sy,
 		 (u_int) sw + 4, (u_int) sh + 2);
 
   XSetForeground(theDisp, theGC,
 		 (bf->lit && bf->lit!=ICON_ONLY) ? browbg : browfg);
-  CenterString(br->iconW, x + ISPACE_WIDE/2, 
+  CenterString(br->iconW, x + ISPACE_WIDE/2,
 	       y + ISPACE_TOP + ISIZE_HIGH + ISPACE_TTOP + CHIGH/2, nstr);
 }
 
@@ -1535,7 +1537,6 @@ static void eraseIcon(br, num)
 
   int i,x,y,ix,iy,w,h;
   BFIL *bf;
-  char  tmpstr[64], *nstr;
 
   if (num<0 || num >= br->bfLen) return;
   bf = &(br->bfList[num]);
@@ -1579,12 +1580,12 @@ static void eraseIconTitle(br, num)
   y = (i / br->numWide) * ISPACE_HIGH;
 
   XSetForeground(theDisp, theGC, browbg);
-  XFillRectangle(theDisp, br->iconW, theGC, 
+  XFillRectangle(theDisp, br->iconW, theGC,
 		 x, y + ISPACE_TOP + ISIZE_HIGH + ISPACE_TTOP - 1,
 		 (u_int) ISPACE_WIDE, (u_int) LINEHIGH);
 
-  if (ctrlColor) 
-    Draw3dRect(br->iconW, 0, 0, (u_int) br->iwWide-1, (u_int) br->iwHigh-1, 
+  if (ctrlColor)
+    Draw3dRect(br->iconW, 0, 0, (u_int) br->iwWide-1, (u_int) br->iwHigh-1,
 	       R3D_IN, 2, browhi, browlo, browbg);
 }
 
@@ -1658,7 +1659,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
   /* returns '-1' normally, returns an index into bfList[] if the user
      double-clicks an icon */
 
-  int       i,j, base, num, x,y,ix,iy, rv, sel, cpymode, dodel;
+  int       i,j, rv, sel, cpymode, dodel;
   BROWINFO *destBr;
   BFIL     *bf;
   char      buf[256], *destFolderName;
@@ -1681,7 +1682,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
     }
 
     changedNumLit(br, sel, 0);
-    br->lastIconClicked = -1;  
+    br->lastIconClicked = -1;
   }
 
 
@@ -1725,10 +1726,9 @@ static int clickIconWin(br, mx, my, mtime, multi)
 
     changedNumLit(br, sel, 0);
 
-    
+
     /* see if we've double-clicked something */
     if (sel==br->lastIconClicked && mtime-br->lastClickTime < DBLCLICKTIME) {
-      int k;
       br->lastIconClicked = -1;    /* YES */
 
       doubleClick(br, sel);
@@ -1759,10 +1759,10 @@ static int clickIconWin(br, mx, my, mtime, multi)
     first = 1;  hasrect = 0;  cpymode = 0;
     origsval = br->scrl.val;
 
-    if ( (sel>=0 && !multi) || sel==-1) {  
+    if ( (sel>=0 && !multi) || sel==-1) {
       /* clicked on an icon, or clicked on nothing... */
 
-      while (!XQueryPointer(theDisp, rootW, &rW, &cW, &rootx, &rooty, 
+      while (!XQueryPointer(theDisp, rootW, &rW, &cW, &rootx, &rooty,
 			    &x,&y,&mask));
       if (mask & Button1Mask) {  /* still held down */
 
@@ -1773,7 +1773,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
 	else curs = movecurs;
 
 	/* change cursors */
-	for (i=0; i<MAXBRWIN; i++) 
+	for (i=0; i<MAXBRWIN; i++)
 	  XDefineCursor(theDisp,binfo[i].iconW, curs);
 
 	samepos = oldx = oldy = oldbrnum = 0;
@@ -1785,43 +1785,43 @@ static int clickIconWin(br, mx, my, mtime, multi)
 
 	  if (sel>=0) {  /* see if changed copy/move status (and cursor) */
 	    int cmod;
-	    
+
 	    cmod = (mask&ControlMask || mask&ShiftMask) ? 1 : 0;
 
 	    if (cmod != cpymode && !dodel) {
 	      curs = (cmod) ? copycurs : movecurs;
-	      	for (i=0; i<MAXBRWIN; i++) 
+	      	for (i=0; i<MAXBRWIN; i++)
 		  XDefineCursor(theDisp,binfo[i].iconW, curs);
 	    }
 	    cpymode = cmod;
-	    
-	    
+
+
 	    /* see if cursor is in any of the trash can areas */
 	    for (i=0; i<MAXBRWIN; i++) {
 	      if (binfo[i].vis) {
-		XTranslateCoordinates(theDisp, rW, binfo[i].win, rootx,rooty, 
+		XTranslateCoordinates(theDisp, rW, binfo[i].win, rootx,rooty,
 				      &bwx,&bwy, &cW);
 		if (inTrash(&binfo[i], bwx, bwy)) break;
 	      }
 	    }
-	    
+
 	    if (dodel && i==MAXBRWIN) {        /* moved out */
 	      dodel = 0;
 	      curs = (cpymode) ? copycurs : movecurs;
-	      for (i=0; i<MAXBRWIN; i++) 
+	      for (i=0; i<MAXBRWIN; i++)
 		XDefineCursor(theDisp,binfo[i].iconW, curs);
 	    }
-	    
+
 	    else if (!dodel && i<MAXBRWIN) {   /* moved in */
 	      dodel = 1;
-	      for (i=0; i<MAXBRWIN; i++) 
+	      for (i=0; i<MAXBRWIN; i++)
 		XDefineCursor(theDisp,binfo[i].iconW, delcurs);
 	    }
 	  }
 
 
 
-	  XTranslateCoordinates(theDisp, rW, br->iconW, rootx,rooty, 
+	  XTranslateCoordinates(theDisp, rW, br->iconW, rootx,rooty,
 				&iwx,&iwy, &cW);
 
 	  /* find deepest child that the mouse is in */
@@ -1837,12 +1837,12 @@ static int clickIconWin(br, mx, my, mtime, multi)
 	  /* if it's in any icon window, and we're doing icon-dragging
 	     OR we're doing a rectangle-drag */
 
-	  if (i<MAXBRWIN || sel == -1) {  
+	  if (i<MAXBRWIN || sel == -1) {
 	    if (i<MAXBRWIN) destBr = &binfo[i];
 	    if (sel == -1)  destBr = br;
 
-	    /* AUTO-SCROLLING:  scroll any icon window if we're doing an 
-	       icon-drag.  Only scroll the original window if we're doing 
+	    /* AUTO-SCROLLING:  scroll any icon window if we're doing an
+	       icon-drag.  Only scroll the original window if we're doing
 	       a rect drag */
 
 	    if (sel>=0 && (oldx!=x || oldy!=y || oldbrnum!=i)) {  /* moved */
@@ -1873,7 +1873,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
 	      }
 	    }
 
-	    
+
 	    /* if we clicked on an icon (originally), and therefore are
 	       showing the 'move files' cursor, see if the cursor is within
 	       the icon region of any folders.  If so, light up *the icon
@@ -1904,9 +1904,9 @@ static int clickIconWin(br, mx, my, mtime, multi)
 
 	    /* Dragging a selection rectangle. */
 
-	    else { 
+	    else {
 	      static int prevx, prevy, prevcnt;
-	      int        origy, top, left, wide, high, cnt;
+	      int        origy, cnt;
 
 	      if (first) { prevx = mx;  prevy = my;  first=0;  prevcnt = -1; }
 
@@ -1922,18 +1922,18 @@ static int clickIconWin(br, mx, my, mtime, multi)
 
 		rx  = (mx    < x) ? mx    : x;
 		ry  = (origy < y) ? origy : y;
-		rw  = abs(mx - x);  
+		rw  = abs(mx - x);
 		rh  = abs(origy - y);
 
 		/* figure out which icons need to be lit/unlit.  Only
 		   redraw those that have changed state */
-		
-		for (i=0,cnt=0, bf=br->bfList; i<br->bfLen; i++,bf++) {
-		  int ix, iy, isin, light;
 
-		  ix = ((i%br->numWide) * ISPACE_WIDE) 
+		for (i=0,cnt=0, bf=br->bfList; i<br->bfLen; i++,bf++) {
+		  int ix, iy, isin;
+
+		  ix = ((i%br->numWide) * ISPACE_WIDE)
 		                  + ISPACE_WIDE/2 - bf->w/2;
-		  iy = ((i/br->numWide) * ISPACE_HIGH) 
+		  iy = ((i/br->numWide) * ISPACE_HIGH)
 		                  + ISPACE_TOP + ISIZE_HIGH - bf->h;
 
 		  iy = iy - br->scrl.val * ISPACE_HIGH;
@@ -1994,7 +1994,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
 	}
 
 	/* RELEASED BUTTON:  back to normal arrow cursor */
-	for (i=0; i<MAXBRWIN; i++) 
+	for (i=0; i<MAXBRWIN; i++)
 	  XDefineCursor(theDisp, binfo[i].iconW, None);
 
 	if (sel == -1) {  /* was dragging rectangle */
@@ -2007,7 +2007,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
 	    if (bf->lit == TEMP_LIT || bf->lit == TEMP_LIT1) {
 	      bf->lit = 1;  drawIcon(br, i);
 	    }
-	    
+
 	    if (bf->lit) br->numlit++;
 	  }
 
@@ -2020,7 +2020,6 @@ static int clickIconWin(br, mx, my, mtime, multi)
 
   /* if doing a copy or a move, do the thing to the files */
   if (sel >= 0) {
-    char *destFolder;
 
     if (DEBUG) {
       fprintf(stderr,"---------------\n");
@@ -2029,7 +2028,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
       fprintf(stderr,"Dest Folder: '%s'\n", destFolderName);
     }
 
-    
+
     if (!br->numlit) {
       if (DEBUG) fprintf(stderr, "no selected files.  Nothing to do!\n");
     }
@@ -2042,7 +2041,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
       if (DEBUG) fprintf(stderr, "no destination.  Nothing to do!\n");
     }
 
-    else if (strcmp(destFolderName,".")     == 0 && 
+    else if (strcmp(destFolderName,".")     == 0 &&
 	     strcmp(br->path, destBr->path) == 0) {
       if (DEBUG) fprintf(stderr,"source == destination.  Nothing to do!\n");
     }
@@ -2067,12 +2066,12 @@ static int clickIconWin(br, mx, my, mtime, multi)
 	}
       }
       if (DEBUG) fprintf(stderr,"\n\n");
- 
+
 #ifdef VMS
       /*
-       * For VMS, our directory file names are identifed by the 
-       * special filename extension, ".DIR".  Unfortunately, this 
-       * needs to be stripped before we ever actually use the name 
+       * For VMS, our directory file names are identifed by the
+       * special filename extension, ".DIR".  Unfortunately, this
+       * needs to be stripped before we ever actually use the name
        * in a copy command... :(     RLD 26-FEB-1993
        */
 
@@ -2080,7 +2079,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
 #endif
 
 
-      dragFiles(br, destBr, br->path, destBr->path, destFolderName, nlist, 
+      dragFiles(br, destBr, br->path, destBr->path, destFolderName, nlist,
 		ncnt, cpymode);
 
       /* free namelist */
@@ -2155,7 +2154,7 @@ static void doubleClick(br, sel)
   }
 
 
-  
+
   /* double-clicked something.  We should do something about it */
   if (br->bfList[sel].ftype == BF_DIR) {  /* try to cd */
 #ifndef VMS
@@ -2193,7 +2192,7 @@ static void doubleClick(br, sel)
       *event_retP = THISNEXT;
     }
     else { *event_retP = LOADPIC;  SetDirFName(buf);  }
-    
+
     *event_doneP = 1;     /* make MainLoop load image */
   }
 }
@@ -2259,7 +2258,7 @@ static void keyIconWin(br, kevt)
   stlen = XLookupString(kevt, buf, 128, &ks, (XComposeStatus *) NULL);
   shift = kevt->state & ShiftMask;
   ck    = CursorKey(ks, shift, 1);
-  dealt = 1;  
+  dealt = 1;
 
   RemapKeyCheck(ks, buf, &stlen);
 
@@ -2306,7 +2305,7 @@ static void keyIconWin(br, kevt)
       char fname[MAXPATHLEN];
 
       /* if 'shift-space' find last lit icon, select the next one after it,
-	 and load it.  If 'space' do the same, but lose prior lit.  These 
+	 and load it.  If 'space' do the same, but lose prior lit.  These
 	 are the only cases where br->numlit >1 allowed */
 
       if (br->numlit>1  && buf[0] != ' ') return;
@@ -2314,7 +2313,7 @@ static void keyIconWin(br, kevt)
       if (buf[0]==' ' && (br->numlit>1 || (br->numlit==1 && shift))) {
 	for (i=br->bfLen-1; i>=0 && !br->bfList[i].lit; i--);  /* i=last lit */
 	if (i==br->bfLen-1) return;
-	
+
 	i++;
 	if (!shift) {
 	  for (j=0; j<br->bfLen; j++) {
@@ -2364,7 +2363,7 @@ static void keyIconWin(br, kevt)
 	for (i=0; i<br->bfLen && !br->bfList[i].lit; i++);  /* find lit one */
 	sprintf(fname, "%s%s", br->path, br->bfList[i].name);
 	viewsel = !(strcmp(fname, fullfname));
-	
+
 	if (viewsel) {
 	  if (buf[0]==' ') browKey(br, CK_RIGHT);
 	              else browKey(br, CK_LEFT);
@@ -2372,7 +2371,7 @@ static void keyIconWin(br, kevt)
 
 	if (!br->bfList[i].lit || !viewsel) {   /* changed selection */
 	  for (i=0; i<br->bfLen && !br->bfList[i].lit; i++);  /* find it */
-	  if (br->bfList[i].ftype != BF_DIR) 
+	  if (br->bfList[i].ftype != BF_DIR)
 	    doubleClick(br, -1);
 	}
       }
@@ -2410,10 +2409,10 @@ static void browKey(br, key)
   /* handle up/down/left/right keys
    *
    * if precisely *one* item is lit, than the up/down/left/right keys move
-   * the selection.  
+   * the selection.
    *
    * if NO items are lit, then left/right select the first/last fully-displayed
-   * icon, and up/down simply scroll window up or down, without selecting 
+   * icon, and up/down simply scroll window up or down, without selecting
    * anything
    *
    * if more than one item is lit, up/down/left/right keys BEEP
@@ -2443,8 +2442,8 @@ static void browKey(br, key)
 	if (key == CK_DOWN)  j = i + br->numWide;
 	if (key == CK_LEFT)  j = i - 1;
 	if (key == CK_RIGHT) j = i + 1;
-	
-	if (j >= 0 && j < br->bfLen) {  
+
+	if (j >= 0 && j < br->bfLen) {
 	  br->bfList[i].lit = 0;
 	  br->bfList[j].lit = 1;
 	  makeIconVisible(br,j);
@@ -2455,7 +2454,7 @@ static void browKey(br, key)
       }
     }
 
-  
+
     if (br->numlit == 0) {   /* no current selection */
       if (key == CK_UP)   SCSetVal(&br->scrl, br->scrl.val - 1);
       if (key == CK_DOWN) SCSetVal(&br->scrl, br->scrl.val + 1);
@@ -2541,13 +2540,13 @@ static void changedBrDirMB(br, sel)
        *  The VMS chdir always needs 2 components (device and directory),
        *  so convert "/device" to "/device/000000" and convert
        *  "/" to "/XV_Root_Device/000000" (XV_RootDevice will need to be
-       *  a special concealed device setup to provide list of available 
+       *  a special concealed device setup to provide list of available
        *  disks).
        *
        *  End 'tmppath' by changing trailing '/' (of dir name) to a '\0'
        */
       *rindex ( tmppath, '/') = '\0';
-      if ( ((br->ndirs-sel) == 2) && (strlen(tmppath) > 1) ) 
+      if ( ((br->ndirs-sel) == 2) && (strlen(tmppath) > 1) )
 	strcat ( tmppath, "/000000" ); /* add root dir for device */
       else if  ((br->ndirs-sel) == 1 )
 	strcpy ( tmppath, "/XV_Root_Device/000000" );  /* fake top level */
@@ -2599,7 +2598,7 @@ static int cdBrow(br)
 static void copyDirInfo(srcbr, dstbr)
      BROWINFO *srcbr, *dstbr;
 {
-  /* copies br info from an already existing browser window 
+  /* copies br info from an already existing browser window
      (ie, one that is already showing the same directory) */
 
   int i, oldnum, maxv, page;
@@ -2619,7 +2618,7 @@ static void copyDirInfo(srcbr, dstbr)
   dstbr->dirMB.list  = srcbr->mblist;
   dstbr->dirMB.nlist = srcbr->ndirs;
 
-  XClearArea(theDisp, dstbr->dirMB.win, dstbr->dirMB.x, dstbr->dirMB.y, 
+  XClearArea(theDisp, dstbr->dirMB.win, dstbr->dirMB.x, dstbr->dirMB.y,
 	     dstbr->dirMB.w+3, dstbr->dirMB.h+3, False);
 
   i = StringWidth(dstbr->mblist[0]) + 10;
@@ -2644,7 +2643,7 @@ static void copyDirInfo(srcbr, dstbr)
 
     if ((i&0x03) == 0) drawTemp(dstbr, i, dstbr->bfLen);
     if ((i & 0x3f) == 0) WaitCursor();
-    
+
     sbf = &(srcbr->bfList[i]);
     dbf = &(dstbr->bfList[i]);
 
@@ -2670,7 +2669,7 @@ static void copyDirInfo(srcbr, dstbr)
     if (sbf->pimage) {
       dbf->pimage = (byte *) malloc((size_t) dbf->w * dbf->h);
       if (!dbf->pimage) FatalError("ran out of memory for dbf->pimage");
-      xvbcopy((char *) sbf->pimage, (char *) dbf->pimage, 
+      xvbcopy((char *) sbf->pimage, (char *) dbf->pimage,
 	      (size_t) (dbf->w * dbf->h));
     }
     else dbf->pimage = (byte *) NULL;
@@ -2681,10 +2680,10 @@ static void copyDirInfo(srcbr, dstbr)
       xvbcopy((char *) sbf->ximage, (char *) dbf->ximage, sizeof(XImage));
 
       if (sbf->ximage->data) {
-	dbf->ximage->data = (char *) malloc((size_t) dbf->ximage->height * 
+	dbf->ximage->data = (char *) malloc((size_t) dbf->ximage->height *
 					    dbf->ximage->bytes_per_line);
 	if (!dbf->ximage->data) FatalError("ran out of memory for ximg data");
-	xvbcopy((char *) sbf->ximage->data, (char *) dbf->ximage->data, 
+	xvbcopy((char *) sbf->ximage->data, (char *) dbf->ximage->data,
 		(size_t) dbf->ximage->height * dbf->ximage->bytes_per_line);
       }
     }
@@ -2701,15 +2700,15 @@ static void copyDirInfo(srcbr, dstbr)
   computeScrlVals(dstbr, &maxv, &page);
   if (dstbr->scrl.val > maxv) dstbr->scrl.val = maxv;
 
-  XClearArea(theDisp, dstbr->iconW, 0, 0, (u_int) dstbr->iwWide, 
+  XClearArea(theDisp, dstbr->iconW, 0, 0, (u_int) dstbr->iwWide,
 	     (u_int) dstbr->iwHigh, True);
   SCSetRange(&dstbr->scrl, 0, maxv, dstbr->scrl.val, page);
 
   SetCursors(-1);
 }
 
-    
-  
+
+
 
 /***************************************************************/
 static void scanDir(br)
@@ -2726,7 +2725,7 @@ static void scanDir(br)
    * and it's reasonable to expect folks to want to add their own bitmaps
    */
 
-  int   i,j,k,oldbflen,vmsparent;
+  int   i,j,oldbflen,vmsparent;
   BFIL *bf;
 
   DIR           *dirp;
@@ -2775,7 +2774,7 @@ static void scanDir(br)
 
   /* build brMBlist */
   for (i = br->ndirs-1,j=0; i>=0; i--,j++) {
-    size_t stlen = (i<(br->ndirs-1)) ? dirnames[i+1] - dirnames[i] 
+    size_t stlen = (i<(br->ndirs-1)) ? dirnames[i+1] - dirnames[i]
                                   : strlen(dirnames[i]);
 
     br->mblist[j] = (char *) malloc(stlen+1);
@@ -2784,13 +2783,13 @@ static void scanDir(br)
     strncpy(br->mblist[j], dirnames[i], stlen);
     br->mblist[j][stlen] = '\0';
   }
-    
+
 
   /* refresh the brdirMB button */
   br->dirMB.list  = br->mblist;
   br->dirMB.nlist = br->ndirs;
 
-  XClearArea(theDisp, br->dirMB.win, br->dirMB.x, br->dirMB.y, 
+  XClearArea(theDisp, br->dirMB.win, br->dirMB.x, br->dirMB.y,
 	     br->dirMB.w+3, br->dirMB.h+3, False);
 
   i = StringWidth(br->mblist[0]) + 10;
@@ -2815,7 +2814,7 @@ static void scanDir(br)
   /* count how many files are in the list */
 
   dirp = opendir(".");
-  if (!dirp) {  
+  if (!dirp) {
     endScan(br, oldbflen);
     setBrowStr(br, "Couldn't read current directory.");
     SetCursors(-1);
@@ -2827,11 +2826,11 @@ static void scanDir(br)
 #endif
 
   while ( (dp = readdir(dirp)) != NULL) {
-    if (strcmp(dp->d_name, ".") && 
+    if (strcmp(dp->d_name, ".") &&
 	strcmp(dp->d_name, THUMBDIR)) {
-      if (!br->showhidden && dp->d_name[0] == '.' && 
+      if (!br->showhidden && dp->d_name[0] == '.' &&
 	  strcmp(dp->d_name,"..")!=0) continue;
-      else 
+      else
 	br->bfLen++;
     }
     if ((br->bfLen & 0x3f) == 0) WaitCursor();
@@ -2877,13 +2876,13 @@ static void scanDir(br)
       }
       else {
 	do { dp = readdir(dirp); }
-	while (dp && (strcmp(dp->d_name, ".")==0                    || 
+	while (dp && (strcmp(dp->d_name, ".")==0                    ||
 		      strcmp(dp->d_name, THUMBDIR)==0               ||
 		      strcmp(dp->d_name, THUMBDIRNAME)==0           ||
 		      (br->ndirs==1 && strcmp(dp->d_name,"..")==0)  ||
-		      (!br->showhidden && dp->d_name[0] == '.' && 
+		      (!br->showhidden && dp->d_name[0] == '.' &&
 		       strcmp(dp->d_name,"..")!=0)));
-      
+
 	if (!dp) { br->bfLen = i;  break; }   /* dir got shorter... */
       }
 
@@ -2940,11 +2939,11 @@ static void endScan(br, oldnum)
   if (w<1) w = 1;
   if (h<1) h = 1;
 
-  XClearArea(theDisp, br->iconW, (ctrlColor) ? 2 : 0, (ctrlColor) ? 2 : 0, 
+  XClearArea(theDisp, br->iconW, (ctrlColor) ? 2 : 0, (ctrlColor) ? 2 : 0,
 	     (u_int) w, (u_int) h, False);
 
   SCSetRange(&br->scrl, 0, maxv, br->scrl.val, page);
-  
+
   SetCursors(-1);
 }
 
@@ -2972,7 +2971,7 @@ static void scanFile(br, bf, name)
   bf->pimage = (byte *) NULL;
   bf->ximage = (XImage *) NULL;
   bf->lit    = 0;
-	
+
 
   if (stat(bf->name, &st)==0) {
     bf->ftype = stat2bf((u_int) st.st_mode);
@@ -3048,11 +3047,11 @@ static int bfnamCmp(p1, p2)
   bfcompares++;
   if ((bfcompares & 0x7f)==0) WaitCursor();
 
-  /* sort critera:  directories first, in alphabetical order, 
+  /* sort critera:  directories first, in alphabetical order,
      followed by everything else, in alphabetical order */
-  
+
   if ((b1->ftype == BF_DIR && b2->ftype == BF_DIR) ||
-      (b1->ftype != BF_DIR && b2->ftype != BF_DIR)) 
+      (b1->ftype != BF_DIR && b2->ftype != BF_DIR))
     return strcmp(b1->name, b2->name);
 
   else if (b1->ftype == BF_DIR && b2->ftype != BF_DIR) return -1;
@@ -3108,7 +3107,7 @@ static void rescanDir(br)
     for (i=0; i<bflen; i++) {
       bfnames[i] = (char *) malloc(strlen(br->bfList[i].name) + 1);
       if (!bfnames[i]) FatalError("couldn't alloc bfnames in rescanDir()");
-      
+
       strcpy(bfnames[i], br->bfList[i].name);
     }
   }
@@ -3121,7 +3120,7 @@ static void rescanDir(br)
 
   /* note, either (or both) dirnames/bfnames can be NULL, in which case
      their respective 'len's will be zero */
-  
+
   /* sort the two name lists */
   if (bflen)  qsort((char *) bfnames,  (size_t) bflen, sizeof(char *),namcmp);
   if (dirlen) qsort((char *) dirnames, (size_t) dirlen,sizeof(char *),namcmp);
@@ -3153,7 +3152,7 @@ static void rescanDir(br)
     }
   }
   bflen = j;
-  
+
 
   for (i=j=0; i<dirlen; i++) {
     if (dirnames[i] && strcmp(dirnames[i],".") && strcmp(dirnames[i],"..") &&
@@ -3162,21 +3161,21 @@ static void rescanDir(br)
     }
   }
   dirlen = j;
-  
+
 
   if (DEBUG) {
     fprintf(stderr,"%d files seem to have gone away:  ", bflen);
-    for (i=0; i<bflen; i++) 
+    for (i=0; i<bflen; i++)
       fprintf(stderr,"%s ", bfnames[i]);
     fprintf(stderr,"\n\n");
 
     fprintf(stderr,"%d files seem to have appeared:  ", dirlen);
-    for (i=0; i<dirlen; i++) 
+    for (i=0; i<dirlen; i++)
       fprintf(stderr,"%s ", dirnames[i]);
     fprintf(stderr,"\n\n");
   }
-   
-  
+
+
   /* create a new bfList */
   newlen = br->bfLen - bflen + dirlen;  /* oldlen - #del'd + #created */
   if (newlen>0) {
@@ -3241,7 +3240,7 @@ static void freeBfList(br)
       if (bf->pimage)  free(bf->pimage);
       if (bf->ximage)  xvDestroyImage(bf->ximage);
     }
-    
+
     free(br->bfList);
   }
 
@@ -3267,13 +3266,13 @@ static char **getDirEntries(dir, lenP, dohidden)
      int  *lenP;
      int   dohidden;
 {
-  /* loads up all directory entries into an array.  This *isn't* a great 
-     way to do it, but I can't count on 'scandir()' existing on 
+  /* loads up all directory entries into an array.  This *isn't* a great
+     way to do it, but I can't count on 'scandir()' existing on
      every system.  Returns 'NULL' on failure, or pointer to array of
      'lenP' strings on success.  '.' and '..' ARE included in list
      if !dohidden, all '.*' files are skipped (except . and ..) */
 
-  int    i, j, dirlen;
+  int    i, dirlen;
   DIR   *dirp;
   char **names;
 #ifdef NODIRENT
@@ -3294,9 +3293,9 @@ static char **getDirEntries(dir, lenP, dohidden)
   /* count # of entries in dir (worst case) */
   for (dirlen=0;  (dp = readdir(dirp)) != NULL;  dirlen++);
   if (!dirlen) {
-    closedir(dirp);  
+    closedir(dirp);
     *lenP = dirlen;
-    return (char **) NULL; 
+    return (char **) NULL;
   }
 
 
@@ -3312,7 +3311,7 @@ static char **getDirEntries(dir, lenP, dohidden)
 
     if (!dohidden) {
 #ifndef VMS
-      if (dp->d_name[0] == '.' && 
+      if (dp->d_name[0] == '.' &&
 	  strcmp(dp->d_name,"." )!=0 &&
 	  strcmp(dp->d_name,"..")!=0) continue;
 #endif
@@ -3324,7 +3323,7 @@ static char **getDirEntries(dir, lenP, dohidden)
     strcpy(names[i], dp->d_name);
     i++;
   }
-  
+
   if (i<dirlen) dirlen = i;     /* dir got shorter... */
 
   closedir(dirp);
@@ -3359,7 +3358,7 @@ static void computeScrlVals(br, max, page)
 static void genSelectedIcons(br)
      BROWINFO *br;
 {
-  int i, sval, first, numvis, cnt;
+  int i, cnt;
 
   setBrowStr(br, "");
 
@@ -3395,7 +3394,7 @@ static void genIcon(br, bf)
      BFIL *bf;
 {
   /* given a BFIL entry, load up the file.
-   * if we succeeded in loading up the file, 
+   * if we succeeded in loading up the file,
    *      generate an aspect-correct 8-bit image using brow Cmap
    * otherwise
    *      replace this icon with the BF_UNKNOWN, or BF_ERR icons
@@ -3408,20 +3407,20 @@ static void genIcon(br, bf)
   byte   *icon24, *icon8;
   char    str[256], str1[256], *readname, uncompname[128];
   char    basefname[128], *uncName;
-  
-  
+
+
   if (!bf || !bf->name || bf->name[0] == '\0') return;   /* shouldn't happen */
   str[0] = '\0';
   basefname[0] = '\0';
   pinfo.pic = (byte *) NULL;
   pinfo.comment = (char *) NULL;
   readname = bf->name;
-  
+
   /* free any old info in 'bf' */
   if (bf->imginfo) free          (bf->imginfo);
   if (bf->pimage)  free          (bf->pimage);
   if (bf->ximage)  xvDestroyImage(bf->ximage);
-  
+
   bf->imginfo = (char *)   NULL;
   bf->pimage  = (byte *)   NULL;
   bf->ximage  = (XImage *) NULL;
@@ -3429,9 +3428,9 @@ static void genIcon(br, bf)
 
   /* skip all 'special' files */
   if (!ISLOADABLE(bf->ftype)) return;
-  
+
   filetype = ReadFileType(bf->name);
-  
+
   if (filetype == RFT_COMPRESS) {
 #if (defined(VMS) && !defined(GUNZIP))
     /* VMS decompress doesn't like the file to have a trailing .Z in fname
@@ -3442,7 +3441,7 @@ static void genIcon(br, bf)
 #else
     uncName = bf->name;
 #endif
-    
+
     if (UncompressFile(uncName, uncompname)) {
       filetype = ReadFileType(uncompname);
       readname = uncompname;
@@ -3453,61 +3452,61 @@ static void genIcon(br, bf)
       bf->ftype = BF_ERROR;
     }
   }
-  
+
   /* get rid of comments.  don't need 'em */
   if (pinfo.comment) free(pinfo.comment);  pinfo.comment = (char *) NULL;
-  
-  if (filetype == RFT_ERROR) { 
+
+  if (filetype == RFT_ERROR) {
     sprintf(str,"Couldn't open file '%s'", bf->name);
     setBrowStr(br, str);
     bf->ftype = BF_ERROR;
   }
-  
+
   else if (filetype == RFT_UNKNOWN) {
     /* if it *was* an 'exe', leave it that way */
     if (bf->ftype != BF_EXE) bf->ftype = BF_UNKNOWN;
   }
-  
+
   else {
     /* otherwise it's a known filetype... do the *hard* part now... */
-    
+
     i = ReadPicFile(readname, filetype, &pinfo, 1);
     KillPageFiles(pinfo.pagebname, pinfo.numpages);
-    
+
     if (!i) bf->ftype = BF_ERROR;
-    
+
     if (i && (pinfo.w<=0 || pinfo.h<=0)) {        /* bogus size */
       bf->ftype = BF_ERROR;
       free(pinfo.pic);  pinfo.pic = (byte *) NULL;
     }
-    
+
     if (bf->ftype==BF_ERROR && filetype==RFT_XBM) bf->ftype = BF_UNKNOWN;
   }
-  
+
   /* get rid of comment, as we don't need it */
-  if (pinfo.comment) { 
+  if (pinfo.comment) {
     free(pinfo.comment);  pinfo.comment = (char *) NULL;
   }
-  
+
   /* if we made an uncompressed file, we can rm it now */
   if (readname != bf->name) unlink(readname);
-  
-  
+
+
   /* at this point either BF_ERROR, BF_UNKNOWN, BF_EXE or pic */
-  
+
   if (!pinfo.pic) {
     if (bf->ftype == BF_EXE) return;  /* don't write thumbfiles for exe's */
-    
+
     bf->w = br_file_width;  bf->h = br_file_height;
     writeThumbFile(br, bf, NULL, 0, 0, NULL);   /* BF_ERROR, BF_UNKNOWN */
     return;
   }
-  
+
   /* at this point, we have a pic, so it must be an image file */
-  
-  
+
+
   /* compute size of icon  (iwide,ihigh) */
-  
+
   wexpand = (double) pinfo.w / (double) ISIZE_WIDE;
   hexpand = (double) pinfo.h / (double) ISIZE_HIGH;
 
@@ -3527,13 +3526,13 @@ static void genIcon(br, bf)
 
 
   /* generate icon */
-  icon24 = Smooth24(pinfo.pic, pinfo.type==PIC24, pinfo.w, pinfo.h, 
+  icon24 = Smooth24(pinfo.pic, pinfo.type==PIC24, pinfo.w, pinfo.h,
 		    iwide, ihigh, pinfo.r,pinfo.g,pinfo.b);
   if (!icon24) { bf->ftype = BF_FILE;  free(pinfo.pic); return; }
 
   sprintf(str, "%dx%d ", pinfo.normw, pinfo.normh);
   switch (filetype) {
-  case RFT_GIF:      if (xv_strstr(pinfo.shrtInfo, "GIF89")) 
+  case RFT_GIF:      if (xv_strstr(pinfo.shrtInfo, "GIF89"))
                        strcat(str,"GIF89 file");
                      else
 		       strcat(str,"GIF87 file");
@@ -3543,12 +3542,12 @@ static void genIcon(br, bf)
 
   case RFT_PBM:      if (xv_strstr(pinfo.fullInfo, "raw")) strcat(str,"Raw ");
                      else strcat(str,"Ascii ");
-    
+
                      for (i=0; i<3 && (strlen(pinfo.fullInfo)>(size_t)3); i++){
 		       str1[0] = pinfo.fullInfo[i];  str1[1] = '\0';
 		       strcat(str, str1);
 		     }
-         
+
                      strcat(str," file");
                      break;
 
@@ -3569,19 +3568,19 @@ static void genIcon(br, bf)
   case RFT_FITS:     strcat(str,"FITS file");             break;
   default:           strcat(str,"file of unknown type");  break;
   }
-  
-  
+
+
   /* find out length of original file */
   {  FILE *fp;
      long  filesize;
      char  buf[64];
-     
+
      fp = fopen(bf->name, "r");
      if (fp) {
        fseek(fp, 0L, 2);
        filesize = ftell(fp);
        fclose(fp);
-       
+
        sprintf(buf,"  (%ld bytes)", filesize);
        strcat(str, buf);
      }
@@ -3609,17 +3608,17 @@ static void genIcon(br, bf)
   bf->w       = iwide;
   bf->h       = ihigh;
   bf->ftype   = BF_HAVEIMG;
-  
+
   bf->ximage = Pic8ToXImage(icon8, (u_int) iwide, (u_int) ihigh, browcols,
 			    browR, browG, browB);
-  
+
   free(icon24);
   free(pinfo.pic);
 }
 
 
 
-    
+
 
 
 /*
@@ -3682,7 +3681,7 @@ static void loadThumbFile(br, bf)
   /* read comments until we see '#END_OF_COMMENTS', or hit EOF */
   while (1) {
     if (!fgets(buf, 256, fp)) goto errexit;
-    
+
     if      (!strncmp(buf, "#END_OF_COMMENTS", strlen("#END_OF_COMMENTS")))
       break;
 
@@ -3714,7 +3713,7 @@ static void loadThumbFile(br, bf)
 
 
   /* read width, height, maxval */
-  if (!fgets(buf, 256, fp) || sscanf(buf, "%d %d %d", &w, &h, &mv) != 3) 
+  if (!fgets(buf, 256, fp) || sscanf(buf, "%d %d %d", &w, &h, &mv) != 3)
     goto errexit;
 
 
@@ -3738,14 +3737,14 @@ static void loadThumbFile(br, bf)
     bf->h       = h;
     bf->ftype   = BF_HAVEIMG;
     bf->imginfo = info;
-    
-    bf->ximage = Pic8ToXImage(icon8, (u_int) w, (u_int) h, browcols, 
+
+    bf->ximage = Pic8ToXImage(icon8, (u_int) w, (u_int) h, browcols,
 			      browR, browG, browB);
   }
   else {
     if (info) free(info);
   }
-  
+
   fclose(fp);
   return;
 
@@ -3757,7 +3756,7 @@ static void loadThumbFile(br, bf)
 }
 
 
-  
+
 /***************************************************************/
 static void writeThumbFile(br, bf, icon8, w, h, info)
      BROWINFO *br;
@@ -3787,7 +3786,7 @@ static void writeThumbFile(br, bf, icon8, w, h, info)
 
   fp = fopen(thFname, "w");
   if (!fp) {
-    sprintf(buf, "Can't create thumbnail file '%s':  %s", thFname, 
+    sprintf(buf, "Can't create thumbnail file '%s':  %s", thFname,
 	    ERRSTR(errno));
     setBrowStr(br, buf);
     return;            /* can't write... */
@@ -3829,9 +3828,9 @@ static void writeThumbFile(br, bf, icon8, w, h, info)
     setBrowStr(br, buf);
     return;            /* can't write... */
   }
-  
+
   fclose(fp);
-  
+
   chmod(thFname, (mode_t) perm);
 }
 
@@ -3915,7 +3914,7 @@ static void updateIcons(br)
 
       if (s1 || s2 || filest.st_mtime > thumbst.st_mtime ||
 	              filest.st_ctime > thumbst.st_ctime) {
-	/* either stat'ing the file or the thumbfile failed, or 
+	/* either stat'ing the file or the thumbfile failed, or
 	   both stat's succeeded and the file has a newer mod or creation
 	   time than the thumbnail file */
 
@@ -3926,8 +3925,8 @@ static void updateIcons(br)
 
 	if (bf->ftype != BF_EXE) {
 	  iconsBuilt++;
-	  if (DEBUG) 
-	    fprintf(stderr,"icon made:fname='%s' thfname='%s' %d,%d,%d,%d\n",
+	  if (DEBUG)
+	    fprintf(stderr,"icon made:fname='%s' thfname='%s' %d,%d,%ld,%ld\n",
 		    bf->name, thfname, s1,s2,filest.st_mtime,thumbst.st_mtime);
 	}
       }
@@ -3974,7 +3973,7 @@ static void updateIcons(br)
 	}
       }
       statcount++;
-      
+
       if ((statcount % 30)==0) WaitCursor();
     }
     closedir(dirp);
@@ -3998,16 +3997,16 @@ static void drawTemp(br, cnt, maxcnt)
 {
   if (maxcnt<1) return;   /* none of that naughty ol' divide by zero stuff */
 
-  DrawTempGauge(br->win, 5, br->dirMB.y, 
+  DrawTempGauge(br->win, 5, br->dirMB.y,
 		(int) br->dirMB.x-10, (int) br->dirMB.h,
 		(double) cnt / (double) maxcnt,
 		browfg, browbg, browhi, browlo, "");
 }
- 
+
 static void clearTemp(br)
   BROWINFO *br;
 {
-  XClearArea(theDisp, br->win, 5, br->dirMB.y, 
+  XClearArea(theDisp, br->win, 5, br->dirMB.y,
 	     (u_int) br->dirMB.x-10+1, (u_int) br->dirMB.h + 1, True);
 }
 
@@ -4048,7 +4047,7 @@ static void doRenameCmd(br)
   /* find the selected file */
   for (i=0; i<br->bfLen && !br->bfList[i].lit; i++);
   if (i==br->bfLen) return;    /* shouldn't happen */
-  
+
   origname = br->bfList[i].name;   num = i;
 
   if (strcmp(origname, "..")==0) {
@@ -4058,7 +4057,7 @@ static void doRenameCmd(br)
     return;
   }
 
-  sprintf(txt, "Enter a new name for the %s '%s':", 
+  sprintf(txt, "Enter a new name for the %s '%s':",
 	  (br->bfList[i].ftype==BF_DIR) ? "directory" : "file",
 	  origname);
 
@@ -4107,7 +4106,7 @@ static void doRenameCmd(br)
   drawIcon(br, num);
 
   for (i=0; i<MAXBRWIN; i++) {
-    if (&binfo[i] != br && strcmp(binfo[i].path, br->path)==0) 
+    if (&binfo[i] != br && strcmp(binfo[i].path, br->path)==0)
       rescanDir(&binfo[i]);
   }
 
@@ -4133,7 +4132,7 @@ static void doMkdirCmd(br)
   if (cdBrow(br)) return;
 
   buf[0] = '\0';
-  i = GetStrPopUp("Enter name for new directory:", labels, 2, 
+  i = GetStrPopUp("Enter name for new directory:", labels, 2,
 		  buf, 128, "/ |\'\"<>,", 0);
   if (i) return;     /* cancelled */
 
@@ -4161,7 +4160,7 @@ static void doMkdirCmd(br)
 
   /* rescan current br, and all other br's pointing to same directory */
   for (i=0; i<MAXBRWIN; i++) {
-    if (strcmp(binfo[i].path, br->path)==0) 
+    if (strcmp(binfo[i].path, br->path)==0)
       rescanDir(&binfo[i]);
   }
 
@@ -4179,7 +4178,7 @@ static void doChdirCmd(br)
   int          i;
   static char  buf[MAXPATHLEN+100];
   static char *labels[] = { "\nOk", "\033Cancel" };
-  char str[512];		
+  char str[512];
 
   buf[0] = '\0';
   i = GetStrPopUp("Change to directory:", labels, 2, buf, MAXPATHLEN, " ", 0);
@@ -4226,7 +4225,7 @@ static void doDeleteCmd(br)
    */
 
   BFIL  *bf;
-  int    i, j, numdirs, numfiles, slen, firstdel;
+  int    i, numdirs, numfiles, slen, firstdel;
   char   buf[512];
   static char *yesno[]  = { "\004Delete", "\033Cancel" };
 
@@ -4258,7 +4257,7 @@ static void doDeleteCmd(br)
   }
 
 
-  /* if any plain files are being toasted, bring up the low-key 
+  /* if any plain files are being toasted, bring up the low-key
      confirmation box */
 
   if (numfiles) {
@@ -4281,7 +4280,7 @@ static void doDeleteCmd(br)
     i = PopUp(buf, yesno, 2);
     if (i) return;              /* cancelled */
   }
-     
+
 
   /* if any directories are being toasted, bring up the are you REALLY sure
      confirmation box */
@@ -4309,7 +4308,7 @@ static void doDeleteCmd(br)
 
 
   /* okay, at this point they've been warned.  do the deletion */
-  
+
   for (i=0, bf=br->bfList;  i<br->bfLen;  i++,bf++) {
     if (bf->lit) {
       if (bf->ftype == BF_DIR) rm_dir (br, bf->name);
@@ -4340,7 +4339,7 @@ static void doDeleteCmd(br)
 
   /* rescan other br's that are looking at this directory */
   for (i=0; i<MAXBRWIN; i++) {
-    if (&binfo[i] != br && strcmp(binfo[i].path, br->path)==0) 
+    if (&binfo[i] != br && strcmp(binfo[i].path, br->path)==0)
       rescanDir(&binfo[i]);
   }
 
@@ -4356,7 +4355,7 @@ static void doSelFilesCmd(br)
   int          i;
   static char  buf[MAXPATHLEN+100];
   static char *labels[] = { "\nOk", "\033Cancel" };
-  char str[512];		
+  char str[512];
 
   buf[0] = '\0';
   strcpy(str,"Select file name(s).  Wildcard '*' is allowed.  ");
@@ -4396,7 +4395,7 @@ static void doRecurseCmd(br)
 {
   int          i;
   static char *labels[] = { "\nOk", "\033Cancel" };
-  char         str[512];		
+  char         str[512];
 
   strcpy(str,"Recursive Update:  This could take *quite* a while.\n");
   strcat(str,"Are you sure?");
@@ -4415,7 +4414,7 @@ static void doRecurseCmd(br)
 
 
 /*******************************************/
-static void recurseUpdate(br, subdir) 
+static void recurseUpdate(br, subdir)
      BROWINFO *br;
      char     *subdir;
 {
@@ -4430,7 +4429,7 @@ static void recurseUpdate(br, subdir)
    *      and for each subdir in this dir, recurse
    *
    * if cur dir != orig dir, cd back to orig dir and reload 'br'
-   */ 
+   */
 
   int  i;
   char orgDir[MAXPATHLEN + 2];
@@ -4449,7 +4448,7 @@ static void recurseUpdate(br, subdir)
   }
 
   xv_getwd(curDir, sizeof(curDir));
-  
+
   /* have we looped? */
   for (i=0; i<dirStackLen && strcmp(curDir, dirStack[i]); i++);
   if (i<dirStackLen) {   /* YES */
@@ -4481,8 +4480,8 @@ static void recurseUpdate(br, subdir)
   /* do subdirectories of this directory, not counting .  .. and .xvpics */
   for (i=0; i<br->bfLen; i++) {
     bf = &(br->bfList[i]);
-    if (bf                     && 
-	bf->ftype == BF_DIR    && 
+    if (bf                     &&
+	bf->ftype == BF_DIR    &&
 	strcmp(bf->name, ".")  &&
 	strcmp(bf->name, "..") &&
         strcmp(bf->name, THUMBDIRNAME) ) {
@@ -4524,7 +4523,7 @@ static void rm_file(br, name)
   tmp = (char *) rindex(buf1, '/');
   if (!tmp) strcpy(buf1,".");
   else *tmp = '\0';
-  
+
   sprintf(buf, "%s/%s/%s", buf1, THUMBDIR, BaseName(name));
   if (DEBUG) fprintf(stderr,"   (%s)\n", buf);
 
@@ -4548,7 +4547,7 @@ static void rm_dir1(br)
      BROWINFO *br;
 {
   /* recursively delete this directory, and all things under it */
-  
+
   int    i, dirlen, longpath, oldpathlen;
   char **names, *name, buf[512];
   struct stat st;
@@ -4569,7 +4568,7 @@ static void rm_dir1(br)
       name = names[i];
 
       /* skip . and .. (not that we should ever see them... */
-      if (name[0] == '.' && (name[1]=='\0' || 
+      if (name[0] == '.' && (name[1]=='\0' ||
 			     (name[1]=='.' && name[2]=='\0'))) goto done;
 
       if (strlen(name) + oldpathlen >= (MAXPATHLEN-3)) {
@@ -4586,7 +4585,7 @@ static void rm_dir1(br)
 	rmdirPath[oldpathlen] = '\0';
 	goto done;
       }
-	
+
       if (stat2bf((u_int) st.st_mode) == BF_DIR) {  /* skip, for now */
 	rmdirPath[oldpathlen] = '\0';
 	continue;   /* don't remove from list */
@@ -4594,7 +4593,7 @@ static void rm_dir1(br)
 
       rm_file(br, rmdirPath);
       rmdirPath[oldpathlen] = '\0';
-      
+
     done:     /* remove name from list */
       free(name);
       names[i] = (char *) NULL;
@@ -4645,19 +4644,19 @@ static int overwrite;
 
 
 /*******************************************/
-static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir, 
+static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
 		      names, nlen, cpymode)
      BROWINFO *srcBr, *dstBr;
      char     *srcpath, *dstpath, *dstdir, **names;
      int       nlen, cpymode;
 {
-  /* move or copy file(s) and their associated thumbnail files.  
+  /* move or copy file(s) and their associated thumbnail files.
      srcpath and dstpath will have trailing '/'s.  dstdir is name of
      folder in dstpath (or "." or "..") to write to.  names is an nlen
      long array of strings (the simple filenames of the files to move)
      if 'cpymode' copy files, otherwise move them */
 
-  int  i, j, k, dothumbs, fail;
+  int  i, j, dothumbs, fail;
   char dstp[MAXPATHLEN + 1];
   char src[MAXPATHLEN+1], dst[MAXPATHLEN+1];
   char buf[128];
@@ -4750,7 +4749,7 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
 
 
   /* clear all files in the destination folder */
-  for (i=0; i<dstBr->bfLen; i++) { 
+  for (i=0; i<dstBr->bfLen; i++) {
     dstBr->bfList[i].lit = 0;
   }
   dstBr->numlit = 0;
@@ -4760,10 +4759,10 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
   for (i=0; i<nlen; i++) {
     char *name;  BFIL *bf;
     name = names[i];
-    for (j=0, bf=dstBr->bfList; 
+    for (j=0, bf=dstBr->bfList;
 	 j<dstBr->bfLen && strcmp(name, bf->name)!=0; j++, bf++);
-    if (j<dstBr->bfLen) { 
-      bf->lit = 1;  dstBr->numlit++; 
+    if (j<dstBr->bfLen) {
+      bf->lit = 1;  dstBr->numlit++;
     }
   }
 
@@ -4783,10 +4782,10 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
   changedNumLit(srcBr, -1, 0);
 
 
-  if (fail) sprintf(buf, "Some files were not %s because of errors.", 
+  if (fail) sprintf(buf, "Some files were not %s because of errors.",
 		    cpymode ? "copied" : "moved");
 
-  else if (nlen>1) sprintf(buf, "%d files %s", nlen, 
+  else if (nlen>1) sprintf(buf, "%d files %s", nlen,
 			   (cpymode) ? "copied" : "moved");
   else buf[0] = '\0';
   setBrowStr(srcBr, buf);
@@ -4824,7 +4823,7 @@ static int moveFile(src,dst)
     dstdir = (stat2bf((u_int) st.st_mode) == BF_DIR);
 
     if (overwrite==OWRT_ASK) {
-      sprintf(buf, "%s '%s' exists.\n\nOverwrite?", 
+      sprintf(buf, "%s '%s' exists.\n\nOverwrite?",
 	      dstdir ? "Directory" : "File", dst);
       i = PopUp(buf, owbuts, 4);
 
@@ -4848,7 +4847,7 @@ static int moveFile(src,dst)
     }
   }
 
-  
+
   if (!rename(src, dst)) return 0;   /* Ok */
   if (errno != EXDEV) return 1;      /* failure, of some sort */
 
@@ -4896,7 +4895,7 @@ static int copyFile(src,dst)
   /* possible cases:  source is either a file or a directory, or doesn't exist,
      destination is either a file, a directory, or doesn't exist.
 
-     if source doesn't exist, nothing to do.  
+     if source doesn't exist, nothing to do.
      if source is a file:
         if dest is a file, popup 'overwriting' question, delete file if ok
 	if dest is a dir,  popup 'overwriting dir' question, delete dir if ok
@@ -4957,7 +4956,7 @@ static int copyFile(src,dst)
   /* destination doesn't exist no more, if it ever did... */
   userMask = umask(0);  /* grab the umask */
   umask((mode_t) userMask);      /* put it back... */
-  
+
 
   strcpy(cpSrcPath, src);
   strcpy(cpDstPath, dst);
@@ -5017,7 +5016,7 @@ static void cp()
      called recursively by cp_dir, there are *no* guarantees that either file
      exists or not */
 
-  int         i, havedst;
+  int         havedst;
   struct stat srcSt, dstSt;
 
   if (stat(cpSrcPath, &srcSt)) {   /* src doesn't exist, usefully... */
@@ -5037,7 +5036,7 @@ static void cp()
   }
 
 
-  switch(stat2bf((u_int) srcSt.st_mode)) {   
+  switch(stat2bf((u_int) srcSt.st_mode)) {
     /* determine how to copy, by filetype */
 
     /* NOTE:  There is no S_IFLNK case here, since we're using 'stat()' and
@@ -5059,12 +5058,12 @@ static void cp()
       return;
     }
   }
-    
+
     cp_dir();
     if (!havedst) chmod(cpDstPath, srcSt.st_mode);
-    
+
     break;
-    
+
 
   case BF_CHR:
   case BF_BLK:   cp_special(&srcSt, havedst);    break;
@@ -5089,12 +5088,12 @@ static void cp_dir()
 {
   int    i, dirlen, oldsrclen, olddstlen, longpath;
   char **names, *name;
-  struct stat  srcSt, dstSt;
+  struct stat  srcSt;
 
 
   /* src and dst directories both exists now.  copy entries */
 
-  if (DEBUG) fprintf(stderr,"cp_dir:   src='%s',  dst='%s'\n", 
+  if (DEBUG) fprintf(stderr,"cp_dir:   src='%s',  dst='%s'\n",
 		     cpSrcPath, cpDstPath);
 
   longpath  = 0;
@@ -5110,9 +5109,9 @@ static void cp_dir()
 
   for (i=0; i<dirlen && overwrite!=OWRT_CANCEL; i++) {
     name = names[i];
-    if (name[0] == '.' && (name[1]=='\0' || 
+    if (name[0] == '.' && (name[1]=='\0' ||
 			   (name[1]=='.' && name[2]=='\0'))) goto done;
-    
+
     /* add name to src and dst paths */
     if ((strlen(name) + oldsrclen >= (MAXPATHLEN-3)) ||
 	(strlen(name) + olddstlen >= (MAXPATHLEN-3)))   {
@@ -5130,12 +5129,12 @@ static void cp_dir()
       cpSrcPath[oldsrclen] = '\0';
       goto done;
     }
-     
+
     if (stat2bf((u_int) srcSt.st_mode) == BF_DIR) {
       cpSrcPath[oldsrclen] = '\0';
       continue;                     /* don't remove from list, just skip */
     }
-     
+
     strcat(cpDstPath, "/");
     strcat(cpDstPath, name);
     cp();                         /* RECURSE */
@@ -5169,7 +5168,7 @@ static void cp_dir()
     strcat(cpDstPath, name);
 
     cp();                        /* RECURSE */
-    
+
     cpSrcPath[oldsrclen] = '\0';
     cpDstPath[olddstlen] = '\0';
   }
@@ -5191,10 +5190,10 @@ static void cp_file(st, exists)
 /*****************************/
 {
   register int srcFd, dstFd, rcount, wcount, i;
-  char         str[512], buf[8192];
+  char         buf[8192];
   static char  *owbuts[4] = { "\nOk", "dDon't Ask", "nNo", "\033Cancel" };
 
-  if (DEBUG) fprintf(stderr,"cp_file:  src='%s',  dst='%s'\n", 
+  if (DEBUG) fprintf(stderr,"cp_file:  src='%s',  dst='%s'\n",
 		     cpSrcPath, cpDstPath);
 
   if ((srcFd = open(cpSrcPath, O_RDONLY, 0)) == -1) {
@@ -5255,7 +5254,7 @@ static void cp_special(st, exists)
      int exists;
 /*********************************/
 {
-  if (DEBUG) fprintf(stderr,"cp_spec:  src='%s',  dst='%s'\n", 
+  if (DEBUG) fprintf(stderr,"cp_spec:  src='%s',  dst='%s'\n",
 		     cpSrcPath, cpDstPath);
 
   if (exists && unlink(cpDstPath)) {
@@ -5281,7 +5280,7 @@ static void cp_fifo(st, exists)
      int exists;
 /*********************************/
 {
-  if (DEBUG) fprintf(stderr,"cp_fifo:  src='%s',  dst='%s'\n", 
+  if (DEBUG) fprintf(stderr,"cp_fifo:  src='%s',  dst='%s'\n",
 		     cpSrcPath, cpDstPath);
 
 #ifdef S_IFIFO
@@ -5302,12 +5301,12 @@ static void cp_fifo(st, exists)
 
 
 
-  
+
 /*********************************/
 static int stat2bf(uistmode)
      u_int uistmode;
 {
-  /* given the 'st.st_mode' field from a successful stat(), returns 
+  /* given the 'st.st_mode' field from a successful stat(), returns
      BF_FILE, BF_DIR, BF_BLK, BF_CHR, BF_FIFO, or BF_SOCK.  Does *NOT*
      return BF_EXE */
 
@@ -5357,8 +5356,8 @@ static int selmatch(name, line)
 static int selmatch1(name, arg)
      char *name, *arg;
 {
-  /* returns non-zero if 'name' matches 'arg'.  Any '*' chars found in arg 
-     are considered wildcards that match any number of characters, 
+  /* returns non-zero if 'name' matches 'arg'.  Any '*' chars found in arg
+     are considered wildcards that match any number of characters,
      including zero. */
 
   char *sp, *oldnp;
@@ -5379,7 +5378,7 @@ static int selmatch1(name, arg)
 	while (*name) name++;
 	while (*arg ) arg++;
 	name--;  arg--;
-	
+
 	while (*arg != '*') {
 	  if (*arg != *name || name<oldnp) return 0;
 	  arg--;  name--;
@@ -5388,7 +5387,7 @@ static int selmatch1(name, arg)
       }
 
       else {  /* there are more '*'s in arg... */
-	/* find the first occurrence of the string between the two '*'s.  
+	/* find the first occurrence of the string between the two '*'s.
 	   if the '*'s are next to each other, just throw away the first one */
 
 	arg++;  /* points to char after  first  '*' */
@@ -5410,7 +5409,7 @@ static int selmatch1(name, arg)
 	  arg = sp+1;
 	}
       }
-    }	  
+    }
   }
 
   if (!*arg && !*name) return 1;

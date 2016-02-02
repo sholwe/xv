@@ -43,8 +43,8 @@ int LoadRLE(fname, pinfo)
   byte   bgcol[256];
   byte   maps[3][256];
   int    xpos, ypos, w, h, flags, ncolors, pixelbits, ncmap, cmaplen;
-  int    cmtlen;
-  byte  *img, *pic8;
+  int    cmtlen, npixels, bufsize=0;
+  byte  *img;
   long filesize;
   char  *bname, *errstr;
 
@@ -57,7 +57,7 @@ int LoadRLE(fname, pinfo)
   /* open the stream */
   fp = xv_fopen(fname,"r");
   if (!fp) return (rleError(bname, "unable to open file"));
-  
+
 
   /* figure out the file size */
   fseek(fp, 0L, 2);
@@ -85,7 +85,7 @@ int LoadRLE(fname, pinfo)
   if (DEBUG) {
     fprintf(stderr,"RLE: %dx%d image at %d,%d\n", w, h, xpos, ypos);
     fprintf(stderr,"flags: 0x%02x  (%s%s%s%s)\n",
-	    flags, 
+	    flags,
 	    (flags & H_CLEARFIRST)    ? "CLEARFIRST " : "",
 	    (flags & H_NO_BACKGROUND) ? "NO_BG " : "",
 	    (flags & H_ALPHA)         ? "ALPHA " : "",
@@ -93,7 +93,7 @@ int LoadRLE(fname, pinfo)
 
     fprintf(stderr, "%d bands, %d pixelbits, %d cmap bands, %d cmap entries\n",
 	    ncolors, pixelbits, ncmap, cmaplen);
-  }  
+  }
 
   if (!(flags & H_NO_BACKGROUND)) {
     if (DEBUG) fprintf(stderr, "background value: ");
@@ -176,32 +176,44 @@ int LoadRLE(fname, pinfo)
 
   errstr = NULL;
   if (ncolors == 0 || ncolors == 2)
-    errstr = "Unsupt. # of channels in RLE file.\n";
+    errstr = "Unsupported number of channels in RLE file";
 
   if (pixelbits != 8)
-    errstr = "Only 8-bit pixels supported in RLE files.\n";
+    errstr = "Only 8-bit pixels supported in RLE files";
 
   if (ncmap==0 || ncmap==1 || ncmap == 3 || ncmap == ncolors) { /* ok */ }
-  else errstr = "Invalid # of colormap channels in RLE file.\n";
+  else errstr = "Invalid number of colormap channels in RLE file";
 
-  if (w<1 || h<1)
-    errstr = "Bogus size in RLE header.\n";
+  npixels = w * h;
+  if (w <= 0 || h <= 0 || npixels/w != h)
+    errstr = "RLE image dimensions out of range";
 
 
   if (errstr) {
     fclose(fp);
-    if (pinfo->comment) free(pinfo->comment);  pinfo->comment = (char *) NULL;
+    if (pinfo->comment)
+      free(pinfo->comment);
+    pinfo->comment = (char *) NULL;
     return rleError(bname, errstr);
   }
 
 
   /* allocate image memory */
-  if (ncolors == 1) img = (byte *) calloc((size_t) w * h,     (size_t) 1);
-               else img = (byte *) calloc((size_t) w * h * 3, (size_t) 1);
+  if (ncolors == 1)
+    img = (byte *) calloc((size_t) npixels, (size_t) 1);
+  else {
+    bufsize = 3*npixels;
+    if (bufsize/3 != npixels)
+      return rleError(bname, "RLE image dimensions out of range");
+    img = (byte *) calloc((size_t) bufsize, (size_t) 1);
+  }
+
   if (!img) {
     fclose(fp);
-    if (pinfo->comment) free(pinfo->comment);  pinfo->comment = (char *) NULL;
-    return rleError(bname, "unable to allocate image data.\n");
+    if (pinfo->comment)
+      free(pinfo->comment);
+    pinfo->comment = (char *) NULL;
+    return rleError(bname, "Unable to allocate RLE image data");
   }
 
 
@@ -209,10 +221,10 @@ int LoadRLE(fname, pinfo)
   if ((flags & H_CLEARFIRST) && !(flags & H_NO_BACKGROUND)) {
     byte *ip;
     if (ncolors == 1) {
-      for (i=0, ip=img; i<w*h; i++, ip++) *ip = bgcol[0];
+      for (i=0, ip=img; i<npixels; i++, ip++) *ip = bgcol[0];
     }
     else {
-      for (i=0, ip=img; i<w*h; i++) 
+      for (i=0, ip=img; i<npixels; i++)
 	for (j=0; j<3; j++, ip++) *ip = bgcol[j];
     }
   }
@@ -230,7 +242,7 @@ int LoadRLE(fname, pinfo)
   if (ncmap) {
     byte *ip;
     int   imagelen, cmask;
-    imagelen = (ncolors==1) ? w*h : w*h*3;
+    imagelen = (ncolors==1) ? npixels : bufsize;
     cmask = (cmaplen-1);
 
     if (ncmap == 1) {   /* single gamma curve */
@@ -238,7 +250,7 @@ int LoadRLE(fname, pinfo)
     }
 
     else if (ncmap >= 3 && ncolors >=3) {   /* one curve per band */
-      for (i=0, ip=img; i<w*h; i++) {
+      for (i=0, ip=img; i<npixels; i++) {
 	*ip = maps[0][*ip & cmask];   ip++;
 	*ip = maps[1][*ip & cmask];   ip++;
 	*ip = maps[2][*ip & cmask];   ip++;
@@ -250,7 +262,7 @@ int LoadRLE(fname, pinfo)
   /* finally, convert into XV internal format */
 
   pinfo->pic = img;
-  pinfo->w   = w;  
+  pinfo->w   = w;
   pinfo->h   = h;
   pinfo->normw = pinfo->w;   pinfo->normh = pinfo->h;
   pinfo->frmType = -1;    /* no default format to save in */
@@ -260,7 +272,7 @@ int LoadRLE(fname, pinfo)
     if (ncmap == 0 || ncmap == 1) {   /* grey, or grey with gamma curve */
       pinfo->colType = F_GREYSCALE;
       sprintf(pinfo->fullInfo, "Greyscale RLE.  (%ld bytes)", filesize);
-      for (i=0; i<256; i++) 
+      for (i=0; i<256; i++)
 	pinfo->r[i] = pinfo->g[i] = pinfo->b[i] = i;
     }
     else {
@@ -272,7 +284,7 @@ int LoadRLE(fname, pinfo)
 	pinfo->b[i] = maps[2][i];
       }
     }
-    
+
     sprintf(pinfo->shrtInfo, "%dx%d RLE.",w, h);
   }
 
@@ -294,7 +306,7 @@ static void read_rle(fp, img, w, h, ncolors, ncmap)
      int   w, h, ncolors, ncmap;
 {
   int posx, posy, plane, bperpix, i, pixval, skipcalls;
-  int opcode, operand, done, c, c1;    
+  int opcode, operand, done, c, c1;
   byte *ip;
 
   posx = posy = plane = done = skipcalls = 0;
@@ -324,7 +336,7 @@ static void read_rle(fp, img, w, h, ncolors, ncmap)
     case RSkipPixelsOp:
       if (opcode & LONG_OP) { getc(fp);  operand = GETINT(fp); }
       else operand = getc(fp);
-      
+
       posx += operand;
       break;
 
@@ -340,7 +352,7 @@ static void read_rle(fp, img, w, h, ncolors, ncmap)
 	c = getc(fp);
 	if (plane<ncolors && posy<h && (posx+i < w)) *ip = c;
       }
-      
+
       if (operand & 1) getc(fp);  /* word boundary */
       posx += operand;
       break;
@@ -358,7 +370,7 @@ static void read_rle(fp, img, w, h, ncolors, ncmap)
       for (i=0; i<operand; i++, ip+=bperpix) {
 	if (plane<ncolors && posy<h && (posx+i < w)) *ip = pixval;
       }
-      
+
       /*  if (operand & 1) getc(fp); */  /* word boundary */
       posx += operand;
       break;

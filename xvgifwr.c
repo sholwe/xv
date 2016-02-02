@@ -2,11 +2,11 @@
  * xvgifwr.c  -  handles writing of GIF files.  based on flgife.c and
  *               flgifc.c from the FBM Library, by Michael Maudlin
  *
- * Contains: 
+ * Contains:
  *   WriteGIF(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
  *            comment)
  *
- * Note: slightly brain-damaged, in that it'll only write non-interlaced 
+ * Note: slightly brain-damaged, in that it'll only write non-interlaced
  *       GIF files (in the interests of speed, or something)
  *
  */
@@ -34,7 +34,7 @@
  *	James A. Woods          (decvax!ihnp4!ames!jaw)
  *	Joe Orost               (decvax!vax135!petsd!joe)
  *****************************************************************/
- 
+
 
 #include "xv.h"
 
@@ -44,7 +44,6 @@ static int  Width, Height;
 static int  curx, cury;
 static long CountDown;
 static int  Interlace;
-static byte bw[2] = {0, 0xff};
 
 static void putword     PARM((int, FILE *));
 static void compress    PARM((int, FILE *, byte *, int));
@@ -97,7 +96,7 @@ int WriteGIF(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
   for (i=0; i<numcols; i++) {
     /* see if color #i is already used */
     for (j=0; j<i; j++) {
-      if (rmap[i] == rmap[j] && gmap[i] == gmap[j] && 
+      if (rmap[i] == rmap[j] && gmap[i] == gmap[j] &&
 	  bmap[i] == bmap[j]) break;
     }
 
@@ -115,15 +114,15 @@ int WriteGIF(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
   /* figure out 'BitsPerPixel' */
   for (i=1; i<8; i++)
     if ( (1<<i) >= nc) break;
-  
+
   BitsPerPixel = i;
 
   ColorMapSize = 1 << BitsPerPixel;
-	
+
   RWidth  = Width  = w;
   RHeight = Height = h;
   LeftOfs = TopOfs = 0;
-	
+
   CountDown = w * h;    /* # of pixels we'll be doing */
 
   if (BitsPerPixel <= 1) InitCodeSize = 2;
@@ -137,7 +136,7 @@ int WriteGIF(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
     return (1);
   }
 
-  if (DEBUG) 
+  if (DEBUG)
     fprintf(stderr,"WrGIF: pic=%lx, w,h=%dx%d, numcols=%d, Bits%d,Cmap=%d\n",
 	    (u_long) pic8, w,h,numcols,BitsPerPixel,ColorMapSize);
 
@@ -152,7 +151,7 @@ int WriteGIF(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
   i = 0x80;	                 /* Yes, there is a color map */
   i |= (8-1)<<4;                 /* OR in the color resolution (hardwired 8) */
   i |= (BitsPerPixel - 1);       /* OR in the # of bits per pixel */
-  fputc(i,fp);          
+  fputc(i,fp);
 
   fputc(Background, fp);         /* background color */
 
@@ -290,7 +289,7 @@ static long int out_count = 0;           /* # of codes output (for debugging) */
 /*
  * compress stdin to stdout
  *
- * Algorithm:  use open addressing double hashing (no chaining) on the 
+ * Algorithm:  use open addressing double hashing (no chaining) on the
  * prefix code / next character combination.  We do a variant of Knuth's
  * algorithm D (vol. 3, sec. 6.4) along with G. Knott's relatively-prime
  * secondary probe.  Here, the modular division first probe is gives way
@@ -370,7 +369,7 @@ int   len;
   cl_hash( (count_int) hsize_reg);            /* clear hash table */
 
   output(ClearCode);
-    
+
   while (len) {
     c = pc2nc[*data++];  len--;
     in_count++;
@@ -399,7 +398,7 @@ probe:
       continue;
     }
 
-    if ( (long)HashTabOf (i) >= 0 ) 
+    if ( (long)HashTabOf (i) >= 0 )
       goto probe;
 
 nomatch:
@@ -454,7 +453,7 @@ int code;
     cur_accum |= ((long)code << cur_bits);
   else
     cur_accum = code;
-	
+
   cur_bits += n_bits;
 
   while( cur_bits >= 8 ) {
@@ -482,7 +481,7 @@ int code;
 	maxcode = MAXCODE(n_bits);
     }
   }
-	
+
   if( code == EOFCode ) {
     /* At EOF, write the rest of the buffer */
     while( cur_bits > 0 ) {
@@ -492,11 +491,11 @@ int code;
     }
 
     flush_char();
-	
+
     fflush( g_outfile );
 
 #ifdef FOO
-    if( ferror( g_outfile ) ) 
+    if( ferror( g_outfile ) )
       FatalError("unable to write GIF file");
 #endif
   }
@@ -582,7 +581,7 @@ static void char_out(c)
 int c;
 {
   accum[ a_count++ ] = c;
-  if( a_count >= 254 ) 
+  if( a_count >= 254 )
     flush_char();
 }
 
@@ -596,4 +595,4 @@ static void flush_char()
     fwrite(accum, (size_t) 1, (size_t) a_count, g_outfile );
     a_count = 0;
   }
-}	
+}

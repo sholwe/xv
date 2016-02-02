@@ -22,23 +22,23 @@
    Choice of algorithm for 16->8 bit conversion--linear or histogram stretch.
     (adds CONV24_HIST item in "24/8 bit" pull-down menu.)
    Uses any "palette.tab" file in cwd to color PDS/VICAR image.
- 
+
  * 9-2-91    began integration.	 Much of this code is lifted from vicar.c,
  	     which I wrote for xloadimage.  This is a little simpler, though.
- 
+
  * 10-17-91  pdsuncomp is called with system(), which typically feeds the
  	     commandline to sh.  Make sure that your .profile adds wherever
  	     you have pdsuncomp to the PATH, like
- 
+
  		PATH=$PATH:/usr/local/bin
- 
+
  * 11-15-91  substituted vdcomp from Viking CD's for pdsuncomp. I added
              recognition of - and shut off various messages
- 
+
  * 1-5-92    merged into xv rel 2
- 
+
  * 3-11-92   cleaned up some comments
- 
+
  * 3-24-92   Got some new CD's from NASA of mosics and other processed Viking
              stuff.  There are actually records terminated with CRNLCR in
              these images, as well as ones that identify the spacecraft name
@@ -46,14 +46,14 @@
              yet further to deal with these.  There's a Sun 4 XView binary for
              an image display program on these discs, but it's nowhere near as
              neat as the good Mr. Bradley's XV.
- 
- 
+
+
  * Sources of these CD's:
  *
  *  National Space Science Data Center
  *  Goddard Space Flight Center
  *  Code 933.4
- *  Greenbelt, Maryland  
+ *  Greenbelt, Maryland
  *  (301) 286-6695
  *   or call
  *  (301) 286-9000 (300,1200,2400 bps)
@@ -91,10 +91,10 @@ distribution.
  * Copyright 1989, 1990 by Anthony A. Datri
  *
  * Permission to use, copy, and distribute for non-commercial purposes,
- * is hereby granted without fee, providing that the above copyright   
+ * is hereby granted without fee, providing that the above copyright
  * notice appear in all copies, that both the copyright notice and this
  * permission notice appear in supporting documentation.
- * 
+ *
  * In exception to the above, permission to John Bradley is hereby granted to
  * distribute this code as he sees fit within the context of his "xv" image
  * viewer.
@@ -132,8 +132,8 @@ distribution.
 
 
 static int	lastwasinote = FALSE;
-static char	scanbuff         [MAX_SIZE], 
-                rtbuff         [RTBUFFSIZE], 
+static char	scanbuff         [MAX_SIZE],
+                rtbuff         [RTBUFFSIZE],
 		inote	   [20*COMMENTSIZE],
                 infobuff      [COMMENTSIZE],
 		spacecraft    [COMMENTSIZE],
@@ -203,10 +203,10 @@ static int getpdsrec(f,buff)
 		  }
                 return(count);
 
-    case EOF:	*bp='\0';  return(count);		    
-    
+    case EOF:	*bp='\0';  return(count);
+
     case '\0':  return(count);
-    
+
     default:	count++;  *bp++ = c;
     }
   }
@@ -242,7 +242,7 @@ static int getpdsrec(f,buff)
  * disc seem to leave off the first two bytes.  Sigh.  This may sometimes be
  * a distinction between the fixed and variable-record files.
  */
-            
+
 /*******************************************/
 int LoadPDS(fname, pinfo)
      char    *fname;
@@ -250,11 +250,11 @@ int LoadPDS(fname, pinfo)
 {
   /* returns '1' on success, '0' on failure */
 
-  int tempnum;
+  int tempnum, bytewidth, bufsize;
   FILE	*zf;
   static int isfixed,teco,i,j,itype,vaxbyte,
              recsize,hrecsize,irecsize,isimage,labelrecs,labelsofar,
-             x,y,lpsize,lssize,samplesize,returnp,labelsize,yy;
+             w,h,lpsize,lssize,samplesize,returnp,labelsize,yy;
   char	*tmp;
   char  *ftypstr;
   unsigned long filesize;
@@ -265,7 +265,7 @@ int LoadPDS(fname, pinfo)
   returnp = isimage = FALSE;
   itype   = PDSTRASH;
 
-  teco = i = j = recsize = hrecsize = irecsize = labelrecs = x = y = 0;
+  teco = i = j = recsize = hrecsize = irecsize = labelrecs = w = h = 0;
   lpsize = lssize = samplesize = labelsize = labelsofar = 0;
 
   (*pdsuncompfname) = (*iname) = (*target) = (*filtname) = (*garbage) = '\0';
@@ -363,7 +363,7 @@ int LoadPDS(fname, pinfo)
 	 * length indicator. If the length indicator is odd, then a pad byte
 	 * is appended to the end of the record so that all records contain
 	 * an even number of bytes." */
-	                                                                    
+
 	i=getc(zf);
 	j=getc(zf);
 	if (j == EOF) {
@@ -371,7 +371,7 @@ int LoadPDS(fname, pinfo)
 	  fclose(zf);
 	  return 0;
 	}
-	
+
 	teco = i + (j << 8);
 	if (teco % 2) teco++;
 
@@ -380,7 +380,7 @@ int LoadPDS(fname, pinfo)
 	  fclose(zf);
 	  return 0;
 	}
-	
+
 	scanbuff[teco]='\0';
       }
 
@@ -429,11 +429,11 @@ int LoadPDS(fname, pinfo)
 		 (sscanf(scanbuff," LABEL_RECORDS = %d", &labelrecs) == 1)) {
 	lastwasinote=FALSE;
 	continue;
-      } else if (sscanf(scanbuff," IMAGE_LINES = %d",&y) == 1) {
+      } else if (sscanf(scanbuff," IMAGE_LINES = %d",&h) == 1) {
 	isimage=TRUE; lastwasinote=FALSE; continue;
-      } else if (sscanf(scanbuff," LINE_SAMPLES = %d",&x) == 1) {
+      } else if (sscanf(scanbuff," LINE_SAMPLES = %d",&w) == 1) {
 	lastwasinote=FALSE; continue;
-      } else if (sscanf(scanbuff," LINES = %d",&y) == 1) {
+      } else if (sscanf(scanbuff," LINES = %d",&h) == 1) {
 	isimage=TRUE; lastwasinote=FALSE; continue;
       } else if (sscanf(scanbuff," HEADER_RECORD_BYTES = %d",&hrecsize)==1) {
 	lastwasinote=FALSE; continue;
@@ -472,7 +472,7 @@ int LoadPDS(fname, pinfo)
 
       } else if (sscanf(scanbuff," INSTRUMENT_GAIN_STATE = %s",gainmode)==1) {
 	lastwasinote=FALSE; continue;
-	
+
       } else if (sscanf(scanbuff," EDIT_MODE_ID = %s", editmode) == 1) {
 	lastwasinote=FALSE; continue;
 
@@ -531,11 +531,11 @@ int LoadPDS(fname, pinfo)
 	 *     get my hands on the clown who designed this format...
 	 *                             What we basically assume here
 	 *        is that a NOTE record that doesn't end with a " is
-	 *    followed by some number of continuations, one of which 
+	 *    followed by some number of continuations, one of which
 	 *   will have a " in it.  If this turns out to not be true,
 	 *          well, we'll segmentation fault real soon. We use
 	 * lastwasinote as a semaphore to indicate that the previous
-	 *       record was an unfinished NOTE record.  We clear the	  
+	 *       record was an unfinished NOTE record.  We clear the
 	 *      flag in each of the above record types for potential
 	 *   error recovery, although it really breaks up the beauty
 	 * of the cascading sscanfs.  Dykstra'd love me for this one */
@@ -568,10 +568,10 @@ int LoadPDS(fname, pinfo)
       fclose(zf);
       return 0;
     }
-    
+
     vaxbyte = strncmp(sampletype, "VAX_", (size_t) 4) == 0 ||
       strncmp(sampletype, "LSB_", (size_t) 4) == 0;
-    
+
   } else if (itype == VICAR) {
     /* we've got a VICAR file.  Let's find out how big the puppy is */
     ungetc(' ', zf);
@@ -582,8 +582,8 @@ int LoadPDS(fname, pinfo)
 	SetISTR(ISTR_WARNING,"LoadPDS: bad NL in VICAR\n");
 	returnp=TRUE;
       }
-      
-      if (sscanf(tmp," NL = %d",&y) != 1) {
+
+      if (sscanf(tmp," NL = %d",&h) != 1) {
 	SetISTR(ISTR_WARNING,"LoadPDS: bad scan NL in VICAR\n");
 	returnp=TRUE;
       }
@@ -593,7 +593,7 @@ int LoadPDS(fname, pinfo)
 	returnp=TRUE;
       }
 
-      if (sscanf(tmp, " NS = %d",&x) != 1) {
+      if (sscanf(tmp, " NS = %d",&w) != 1) {
 	SetISTR(ISTR_WARNING,"LoadPDS: bad scan NS in VICAR\n");
 	returnp=TRUE;
       }
@@ -622,6 +622,13 @@ int LoadPDS(fname, pinfo)
 
   } else {
     SetISTR(ISTR_WARNING,"LoadPDS: Unable to parse data.\n");
+    returnp=TRUE;
+  }
+
+  /* samplesize can be arbitrarily large (up to int limit) in non-VICAR files */
+  if (samplesize != 8 && samplesize != 16) {
+    SetISTR(ISTR_WARNING,"LoadPDS: %d bits per pixel not supported",
+      samplesize);
     returnp=TRUE;
   }
 
@@ -689,11 +696,19 @@ int LoadPDS(fname, pinfo)
 
 #ifndef VMS
     sprintf(pdsuncompfname,"%s/xvhuffXXXXXX", tmpdir);
-    mktemp(pdsuncompfname);
-    sprintf(scanbuff,"%s %s - 4 >%s",PDSUNCOMP,fname,pdsuncompfname);
 #else
     strcpy(pdsuncompfname,"sys$disk:[]xvhuffXXXXXX");
+#endif
+
+#ifdef USE_MKSTEMP
+    close(mkstemp(pdsuncompfname));
+#else
     mktemp(pdsuncompfname);
+#endif
+
+#ifndef VMS
+    sprintf(scanbuff,"%s %s - 4 >%s",PDSUNCOMP,fname,pdsuncompfname);
+#else
     sprintf(scanbuff,"%s %s %s 4",PDSUNCOMP,fname,pdsuncompfname);
 #endif
 
@@ -727,63 +742,72 @@ int LoadPDS(fname, pinfo)
     fread(scanbuff, (size_t) labelsize, (size_t) 1, zf);
   }
 
-  x *= samplesize/8;
+  /* samplesize is bits per pixel; guaranteed at this point to be 8 or 16 */
+  bytewidth = w * (samplesize/8);
+  bufsize = bytewidth * h;
+  if (w <= 0 || h <= 0 || bytewidth/w != (samplesize/8) ||
+      bufsize/bytewidth != h)
+  {
+    SetISTR(ISTR_WARNING,"LoadPDS: image dimensions out of range (%dx%dx%d)",
+      w, h, samplesize/8);
+    fclose(zf);
+    return 0;
+  }
 
-  image = (byte *) malloc((size_t) x*y);
+  image = (byte *) malloc((size_t) bufsize);
   if (image == NULL) {
-    SetISTR(ISTR_WARNING,"LoadPDS: couldn't malloc %d",x*y);
     fclose(zf);
     if (isfixed == FALSE)
       unlink(pdsuncompfname);
-    exit(1);
+    FatalError("LoadPDS: can't malloc image buffer");
   }
 
   if ((lssize || lpsize) &&
        ((itype == PDSFIXED) || (itype == VIKINGFIXED) || (itype == VICAR)) ) {
     /* ARrrrgh.  Some of these images have crud intermixed with the image, */
     /* preventing us from freading in one fell swoop */
-    /* (whatever a fell swoop is */
+    /* (whatever a fell swoop is) */
 
-    for (yy=0; yy<y; yy++) {
-      if (lpsize && 
-	  ((teco=(fread(scanbuff,(size_t) lpsize,(size_t) 1,zf))) != 1)) {
+    for (yy=0; yy<h; yy++) {
+      if (lpsize &&
+	  (teco=fread(scanbuff,(size_t) lpsize,(size_t) 1,zf)) != 1) {
 	SetISTR(ISTR_WARNING, "LoadPDS: unexpected EOF reading prefix");
 	fclose(zf);
 	return 0;
       }
-      
-      if ((teco=(fread(image+(yy*x), (size_t) x, (size_t) 1,zf))) != 1) {
+
+      teco = fread(image+(yy*bytewidth), (size_t) bytewidth, (size_t) 1,zf);
+      if (teco != 1) {
 	SetISTR(ISTR_WARNING, "LoadPDS: unexpected EOF reading line %d",yy);
 	fclose(zf);
 	return 0;
       }
 
-      if (lssize && 
-	  ((teco=(fread(scanbuff,(size_t) lssize,(size_t) 1,zf))) != 1)) {
+      if (lssize &&
+	  (teco=fread(scanbuff,(size_t) lssize,(size_t) 1,zf)) != 1) {
 	SetISTR(ISTR_WARNING, "LoadPDS: unexpected EOF reading suffix");
 	fclose(zf);
 	return 0;
       }
     }
 
-  } else if ((yy=fread(image, (size_t) x*y, (size_t) 1, zf)) != 1) {
+  } else if ((yy=fread(image, (size_t) bytewidth*h, (size_t) 1, zf)) != 1) {
     SetISTR(ISTR_WARNING,"LoadPDS: error reading image data");
     fclose(zf);
     if (itype==PDSVARIABLE || itype==VIKINGVARIABLE)
       unlink(pdsuncompfname);
-
     return 0;
   }
 
-    fclose(zf);
+  fclose(zf);
 
 
   if (isfixed == FALSE)
     unlink(pdsuncompfname);
 
   pinfo->pic = image;
-  pinfo->w   = x;
-  pinfo->h    = y;
+  pinfo->w   = w;   /* true pixel-width now (no longer bytewidth!) */
+  pinfo->h   = h;
 
   if (samplesize == 16)
      if (Convert16BitImage(fname, pinfo,
@@ -798,25 +822,25 @@ int LoadPDS(fname, pinfo)
   if (pinfo->comment) {
     char tmp[256];
     *(pinfo->comment) = '\0';
-    
+
     sprintf(tmp, "Spacecraft: %-28sTarget: %-32s\n", spacecraft, target);
     strcat(pinfo->comment, tmp);
-    
+
     sprintf(tmp, "Filter: %-32sMission phase: %-24s\n", filtname, mphase);
     strcat(pinfo->comment, tmp);
-    
+
     sprintf(tmp, "Image time: %-28sGain mode: %-29s\n", itime, gainmode);
     strcat(pinfo->comment, tmp);
-    
+
     sprintf(tmp, "Edit mode: %-29sScan mode: %-29s\n", editmode, scanmode);
     strcat(pinfo->comment, tmp);
-    
+
     sprintf(tmp, "Exposure: %-30sShutter mode: %-25s\n", exposure,shuttermode);
     strcat(pinfo->comment, tmp);
-    
+
     sprintf(tmp, "Instrument: %-28sImage time: %-28s\n", iname, itime);
     strcat(pinfo->comment, tmp);
-    
+
     sprintf(tmp, "Image Note: %-28s", inote);
     strcat(pinfo->comment, tmp);
   }
@@ -868,23 +892,20 @@ static int Convert16BitImage(fname, pinfo, swab)
   m = 65536 * sizeof(byte);
   lut = (byte *) malloc(m);
   if (lut == NULL) {
-    SetISTR(ISTR_WARNING,"LoadPDS: couldn't malloc %d", m);
-    return 0;
+    FatalError("LoadPDS: can't malloc LUT buffer");
   }
-  pinfo->w /= 2;
 
   /* allocate histogram table */
   m = 65536 * sizeof(long);
   hist = (long *) malloc(m);
   if (hist == NULL) {
-    SetISTR(ISTR_WARNING,"LoadPDS: couldn't malloc %d", m);
     free(lut);
-    return 0;
+    FatalError("LoadPDS: can't malloc histogram buffer");
   }
 
   /* check whether histogram file exists */
 #ifdef VMS
-  c = (char *) rindex(strcpy(name, 
+  c = (char *) rindex(strcpy(name,
 			     (c = (char *) rindex(fname, ':')) ? c+1 : fname),
 		      ']');
 #else
@@ -947,14 +968,20 @@ static int Convert16BitImage(fname, pinfo, swab)
     }
   }
 
-  /* allocate new 8-bit image */
   free(hist);
+
+  /* allocate new 8-bit image */
   n = pinfo->w * pinfo->h;
-  pPix8 = (byte *)malloc(n*sizeof(byte));
-  if (pPix8 == NULL) {
-    SetISTR(ISTR_WARNING,"LoadPDS: couldn't malloc %d", n*sizeof(byte));
+  if (pinfo->w <= 0 || pinfo->h <= 0 || n/pinfo->w != pinfo->h) {
+    SetISTR(ISTR_WARNING,"LoadPDS: image dimensions out of range (%dx%d)",
+      pinfo->w, pinfo->h);
     free(lut);
     return 0;
+  }
+  pPix8 = (byte *)malloc(n*sizeof(byte));
+  if (pPix8 == NULL) {
+    free(lut);
+    FatalError("LoadPDS: can't malloc 16-to-8-bit conversion buffer");
   }
 
   /* convert the 16-bit image to 8-bit */
@@ -979,16 +1006,16 @@ static int LoadPDSPalette(fname, pinfo)
   FILE    *fp;
   char    name[1024], buf[256], *c;
   int     i, n, r, g, b;
-  
+
 #ifdef VMS
-  c = (char *) rindex(strcpy(name, 
+  c = (char *) rindex(strcpy(name,
 			     (c = (char *) rindex(fname, ':')) ? c+1 : fname),
 		      ']');
 #else
   c = (char *) rindex(strcpy(name, fname), '/');
 #endif /* VMS */
   (void)strcpy(c ? c+1 : name, "palette.tab");
-  
+
   if ((fp = xv_fopen(name, "r")) == NULL)
     return 0;
   for (i = 0; i < 256; i++) {
@@ -1014,7 +1041,3 @@ static int LoadPDSPalette(fname, pinfo)
 
 
 #endif /* HAVE_PDS */
-
-
-
-

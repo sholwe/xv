@@ -1,6 +1,6 @@
 /*
  *  xvtext.c  -  text file display window routines
- * 
+ *
  *  includes:
  *      void CreateTextWins(geom, cmtgeom);
  *      void OpenTextView(text, textlen, title, freeonclose);
@@ -98,8 +98,7 @@ void CreateTextWins(geom, cmtgeom)
   XSizeHints            hints;
   XSetWindowAttributes  xswa;
   TVINFO               *tv;
-  int                   gx,gy,gw,gh,gset,gx1,gy1;
-  
+
 
   mfwide = monofinfo->max_bounds.width;
   mfhigh = monofinfo->ascent + monofinfo->descent;
@@ -120,10 +119,10 @@ void CreateTextWins(geom, cmtgeom)
     tv = &tinfo[i];
 
     tv->win = CreateWindow((i<CMTWIN) ? "xv text viewer" : "xv image comments",
-			   "XVtextview", 
-			   (i<CMTWIN) ? geom : cmtgeom, 
-			   defwide, 
-			   (i<CMTWIN) ? defhigh : cmthigh, 
+			   "XVtextview",
+			   (i<CMTWIN) ? geom : cmtgeom,
+			   defwide,
+			   (i<CMTWIN) ? defhigh : cmthigh,
 			   infofg, infobg, 1);
     if (!tv->win) FatalError("can't create textview window!");
 
@@ -135,17 +134,17 @@ void CreateTextWins(geom, cmtgeom)
 
     /* note: everything is sized and positioned in resizeText() */
 
-    tv->textW = XCreateSimpleWindow(theDisp, tv->win, 1,1, 100,100, 
+    tv->textW = XCreateSimpleWindow(theDisp, tv->win, 1,1, 100,100,
 				     1,infofg,infobg);
     if (!tv->textW) FatalError("can't create textview text window!");
 
-    SCCreate(&(tv->vscrl), tv->win, 0,0, 1,100, 0,0,0,0, 
+    SCCreate(&(tv->vscrl), tv->win, 0,0, 1,100, 0,0,0,0,
 	     infofg, infobg, hicol, locol, drawTextW);
 
-    SCCreate(&(tv->hscrl), tv->win, 0,0, 0,100, 0,0,0,0, 
+    SCCreate(&(tv->hscrl), tv->win, 0,0, 0,100, 0,0,0,0,
 	     infofg, infobg, hicol, locol, drawTextW);
 
-    if (XGetNormalHints(theDisp, tv->win, &hints)) 
+    if (XGetNormalHints(theDisp, tv->win, &hints))
       hints.flags |= PMinSize;
     else
       hints.flags = PMinSize;
@@ -162,7 +161,7 @@ void CreateTextWins(geom, cmtgeom)
 
     XSelectInput(theDisp, tv->textW, ExposureMask | ButtonPressMask);
 
-    
+
     BTCreate(&(tv->but[TV_ASCII]), tv->win, 0,0,BUTTW,BUTTH,
 	     "Ascii",infofg,infobg,hicol,locol);
     BTCreate(&(tv->but[TV_HEX]), tv->win, 0,0,BUTTW,BUTTH,
@@ -185,7 +184,7 @@ void CreateTextWins(geom, cmtgeom)
   for (i=0; i<MAXTVWIN; i++) {
     resizeText(&tinfo[i], defwide, (i<CMTWIN) ? defhigh : cmthigh);
 
-    XSelectInput(theDisp, tinfo[i].win, ExposureMask | ButtonPressMask | 
+    XSelectInput(theDisp, tinfo[i].win, ExposureMask | ButtonPressMask |
 		 KeyPressMask | StructureNotifyMask);
   }
 
@@ -200,7 +199,6 @@ void TextView(fname)
 {
   /* given a filename, attempts to read in the file and open a textview win */
 
-  int   i;
   long  textlen;
   char *text, buf[512], title[128], rfname[MAXPATHLEN+1];
   char *basefname[128];  /* just current fname, no path */
@@ -222,7 +220,7 @@ void TextView(fname)
     if (!UncompressFile(basefname, rfname)) return;/* failed to uncompress */
 #endif
   }
-      
+
 
 
   fp = fopen(rfname, "r");
@@ -246,7 +244,7 @@ void TextView(fname)
 
   text = (char *) malloc((size_t) textlen);
   if (!text) {
-    sprintf(buf, "Couldn't malloc %ld bytes to read file '%s'", 
+    sprintf(buf, "Couldn't malloc %ld bytes to read file '%s'",
 	    textlen, rfname);
     ErrPopUp(buf, "\nSo what!");
     fclose(fp);
@@ -267,8 +265,8 @@ void TextView(fname)
   /* note:  text gets freed when window gets closed */
 }
 
-    
-    
+
+
 /***************************************************************/
 void OpenTextView(text, len, title, freeonclose)
      char *text, *title;
@@ -276,7 +274,6 @@ void OpenTextView(text, len, title, freeonclose)
 {
   /* opens up a textview window */
 
-  int     i, oldone;
   TVINFO *tv;
 
   tv = &tinfo[0];
@@ -293,6 +290,7 @@ void OpenTextView(text, len, title, freeonclose)
   tv->textlen     = len;
   tv->freeonclose = freeonclose;
   strncpy(tv->title, title, (size_t) TITLELEN-1);
+  tv->title[TITLELEN-1] = '\0';
 
   computeText(tv);      /* compute # lines and linestarts array */
 
@@ -316,7 +314,6 @@ void OpenCommentText()
 {
   /* opens up the reserved 'comment' textview window */
 
-  int     i;
   TVINFO *tv;
 
   tv = &tinfo[CMTWIN];
@@ -351,9 +348,9 @@ void ChangeCommentText()
   tv->textlen     = (tv->text) ? strlen(tv->text) : 0;
   tv->freeonclose = 0;
 
-  if (strlen(fullfname)) 
+  if (strlen(fullfname))
     sprintf(tv->title, "File: '%s'", BaseName(fullfname));
-  else 
+  else
     sprintf(tv->title, "<no file loaded>");
 
   computeText(tv);      /* compute # lines and linestarts array */
@@ -504,7 +501,7 @@ static void closeText(tv)
   if (tv->freeonclose && tv->text)  free(tv->text);
   if (tv->lines) free(tv->lines);
 
-  tv->text  = (char *) NULL;  
+  tv->text  = (char *) NULL;
   tv->lines = (char **) NULL;
   tv->numlines = tv->textlen = tv->hexmode = 0;
 }
@@ -518,7 +515,7 @@ static int tvChkEvent(tv, xev)
   /* checks event to see if it's a text-window related thing.  If it
      is, it eats the event and returns '1', otherwise '0'. */
 
-  int i, rv;
+  int rv;
 
   rv = 1;
 
@@ -560,7 +557,7 @@ static int tvChkEvent(tv, xev)
 	count++;
       } while (XCheckWindowEvent(theDisp, evt.xexpose.window,
 				 ExposureMask, &evt));
-      
+
       XClipBox(reg, &rect);  /* bounding box of region */
       XSetRegion(theDisp, theGC, reg);
 
@@ -570,7 +567,7 @@ static int tvChkEvent(tv, xev)
 	fprintf(stderr,"grouped %d expose events into %d,%d %dx%d rect\n",
 		count, rect.x, rect.y, rect.width, rect.height);
       }
-      
+
       if      (e->window == tv->win)   drawTextView(tv);
       else if (e->window == tv->textW) drawTextW(0, &(tv->vscrl));
 
@@ -584,7 +581,7 @@ static int tvChkEvent(tv, xev)
 
   else if (xev->type == ButtonPress) {
     XButtonEvent *e = (XButtonEvent *) xev;
-    int i,x,y;
+    int x,y;
     x = e->x;  y = e->y;
 
     if (e->button == Button1) {
@@ -615,7 +612,7 @@ static int tvChkEvent(tv, xev)
 
       if (tv->wide != e->width || tv->high != e->height) {
 	if (DEBUG) fprintf(stderr,"Forcing a redraw!  (from configure)\n");
-	XClearArea(theDisp, tv->win, 0, 0, 
+	XClearArea(theDisp, tv->win, 0, 0,
 		   (u_int) e->width, (u_int) e->height, True);
 	resizeText(tv, e->width, e->height);
       }
@@ -633,7 +630,7 @@ static void resizeText(tv,w,h)
      TVINFO *tv;
      int     w,h;
 {
-  int        i, maxw, maxh, hmax, hpage, vmax, vpage;
+  int        i, maxw, maxh;
   XSizeHints hints;
 
   if (tv->wide == w && tv->high == h) return;  /* no change in size */
@@ -657,7 +654,7 @@ static void resizeText(tv,w,h)
   tv->twWide = tv->chwide * mfwide + 6;
   tv->twHigh = tv->chhigh * mfhigh + 6;
 
-  XMoveResizeWindow(theDisp, tv->textW, LRMARGINS, TOPMARGIN, 
+  XMoveResizeWindow(theDisp, tv->textW, LRMARGINS, TOPMARGIN,
 		    (u_int) tv->twWide, (u_int) tv->twHigh);
 
   for (i=0; i<TV_NBUTTS; i++) {
@@ -692,8 +689,8 @@ static void computeScrlVals(tv)
   hpag = tv->chwide / 4;
   vpag = tv->chhigh - 1;
 
-  
-  SCChange(&tv->vscrl, LRMARGINS + tv->twWide+1, TOPMARGIN, 
+
+  SCChange(&tv->vscrl, LRMARGINS + tv->twWide+1, TOPMARGIN,
 	   1, tv->twHigh, 0, vmax, tv->vscrl.val, vpag);
 
   SCChange(&tv->hscrl, LRMARGINS, TOPMARGIN + tv->twHigh + 1,
@@ -731,11 +728,11 @@ static void drawTextView(tv)
     y = 5;
 
     XSetForeground(theDisp, theGC, infobg);
-    XFillRectangle(theDisp, tv->win, theGC, 5+1, y+1, 
+    XFillRectangle(theDisp, tv->win, theGC, 5+1, y+1,
 		   (u_int) StringWidth(tv->title)+6, (u_int) CHIGH+4);
 
     XSetForeground(theDisp, theGC, infofg);
-    XDrawRectangle(theDisp, tv->win, theGC, 5, y, 
+    XDrawRectangle(theDisp, tv->win, theGC, 5, y,
 		   (u_int) StringWidth(tv->title)+7, (u_int) CHIGH+5);
 
     Draw3dRect(tv->win, 5+1, y+1, (u_int) StringWidth(tv->title)+5,
@@ -763,15 +760,15 @@ static void drawNumLines(tv)
 
   if (tv->hexmode) nl = tv->hexlines;
   else {
-    if (tv->numlines>0 && 
-	tv->lines[tv->numlines-1] - tv->lines[tv->numlines-2] == 1) 
+    if (tv->numlines>0 &&
+	tv->lines[tv->numlines-1] - tv->lines[tv->numlines-2] == 1)
       nl = tv->numlines - 2;      /* line after last \n has zero length */
     else nl = tv->numlines - 1;
   }
   if (nl<0) nl = 0;
 
-  sprintf(tmpstr, "%d byte%s, %d line%s", 
-	  tv->textlen, (tv->textlen!=1) ? "s" : "", 
+  sprintf(tmpstr, "%d byte%s, %d line%s",
+	  tv->textlen, (tv->textlen!=1) ? "s" : "",
 	  nl, (nl!=1) ? "s" : "");
 
   w = StringWidth(tmpstr) + 7;  /* width of frame */
@@ -779,13 +776,13 @@ static void drawNumLines(tv)
   y = 6;
 
   XSetForeground(theDisp, theGC, infobg);
-  XFillRectangle(theDisp, tv->win, theGC, (x-w)+1, y+1, 
+  XFillRectangle(theDisp, tv->win, theGC, (x-w)+1, y+1,
 		 (u_int) (w-1), (u_int) CHIGH+4);
 
   XSetForeground(theDisp, theGC, infofg);
   XDrawRectangle(theDisp, tv->win, theGC, x-w, y, (u_int) w, (u_int) CHIGH+5);
 
-  Draw3dRect(tv->win, (x-w)+1, y+1, (u_int) (w-2), (u_int) CHIGH+3, 
+  Draw3dRect(tv->win, (x-w)+1, y+1, (u_int) (w-2), (u_int) CHIGH+3,
 	     R3D_IN,2,hicol,locol,infobg);
 
   XSetForeground(theDisp, theGC, infofg);
@@ -800,10 +797,10 @@ static void eraseNumLines(tv)
   int x, y, w, nl;
   char tmpstr[64];
 
-  nl = (tv->hexmode) ? tv->hexlines : tv->numlines-1;                 
+  nl = (tv->hexmode) ? tv->hexlines : tv->numlines-1;
 
-  sprintf(tmpstr, "%d byte%s, %d line%s", 
-	  tv->textlen, (tv->textlen>1) ? "s" : "", 
+  sprintf(tmpstr, "%d byte%s, %d line%s",
+	  tv->textlen, (tv->textlen>1) ? "s" : "",
 	  nl, (nl>1) ? "s" : "");
 
   w = StringWidth(tmpstr) + 7;  /* width of frame */
@@ -825,14 +822,14 @@ static void drawTextW(delta, sptr)
   u_char  *sp, *ep, *lp;
 
   /* figure out TVINFO pointer from SCRL pointer */
-  for (i=0; i<MAXTVWIN && sptr != &tinfo[i].vscrl 
+  for (i=0; i<MAXTVWIN && sptr != &tinfo[i].vscrl
        && sptr != &tinfo[i].hscrl; i++);
   if (i==MAXTVWIN) return;   /* didn't find one */
 
   tv = &tinfo[i];
 
   /* make sure we've been sized.  Necessary, as creating/modifying the
-     scrollbar calls this routine directly, rather than through 
+     scrollbar calls this routine directly, rather than through
      TextCheckEvent() */
 
   if (!hasBeenSized) return;
@@ -849,7 +846,7 @@ static void drawTextW(delta, sptr)
     for (i=0; i<tv->chhigh; i++) {    /* draw each line */
       lnum = i + tv->vscrl.val;
       if (lnum < tv->numlines-1) {
-	
+
 	/* find start of displayed portion of line.  This is *wildly*
 	   complicated by the ctrl-character and tab expansion... */
 
@@ -902,7 +899,7 @@ static void drawTextW(delta, sptr)
 	      if      (extrach == 2) *lp = '^';
 	      else if (extrach == 1) *lp = *sp + 64;
 	    }
-      
+
 	    else if (*sp > 127) {
 	      if (!extrach) extrach = 4;
 	      if      (extrach == 4) *lp = '\\';
@@ -926,7 +923,7 @@ static void drawTextW(delta, sptr)
       }
 
       /* draw the line */
-      XDrawImageString(theDisp, tv->textW, theGC, 
+      XDrawImageString(theDisp, tv->textW, theGC,
 		       3, i*mfhigh + 3 + mfascent, linestr, lwide);
     }  /* for i ... */
   }  /* if hexmode */
@@ -936,7 +933,7 @@ static void drawTextW(delta, sptr)
     for (i=0; i<tv->chhigh; i++) {    /* draw each line */
       lnum = i + tv->vscrl.val;
       if (lnum < tv->hexlines) {
-	
+
 	char hexstr[80], tmpstr[16];
 
 	/* generate hex for this line */
@@ -972,7 +969,7 @@ static void drawTextW(delta, sptr)
 	   now build 'linestr', which is going to have hexstr shifted
 	   and/or padded with blanks  (ie, the displayed portion or hexstr) */
 
-	/* skip obscured beginning of line, if any */ 
+	/* skip obscured beginning of line, if any */
 	for (cpos=0, sp=(byte *) hexstr; cpos<hpos && *sp;  cpos++, sp++);
 
 	for (cpos=0, lp=(byte *)linestr;  cpos<lwide; cpos++, lp++) {
@@ -985,16 +982,16 @@ static void drawTextW(delta, sptr)
       }
 
       /* draw the line */
-      XDrawImageString(theDisp, tv->textW, theGC, 
+      XDrawImageString(theDisp, tv->textW, theGC,
 		       3, i*mfhigh + 3 + mfascent, linestr, lwide);
     }  /* for i ... */
   }  /* else hexmode */
-    
+
 
 
   XSetFont(theDisp, theGC, mfont);
 
-  Draw3dRect(tv->textW, 0, 0, (u_int) (tv->twWide-1), (u_int) (tv->twHigh-1), 
+  Draw3dRect(tv->textW, 0, 0, (u_int) (tv->twWide-1), (u_int) (tv->twHigh-1),
 	     R3D_IN, 2, hicol, locol, infobg);
 }
 
@@ -1033,7 +1030,7 @@ static void keyText(tv, kevt)
   stlen = XLookupString(kevt, buf, 128, &ks, (XComposeStatus *) NULL);
   shift = kevt->state & ShiftMask;
   ck    = CursorKey(ks, shift, 1);
-  dealt = 1;  
+  dealt = 1;
 
   RemapKeyCheck(ks, buf, &stlen);
 
@@ -1060,8 +1057,6 @@ static void textKey(tv, key)
      TVINFO *tv;
      int     key;
 {
-  int i,j;
-
   if (!tv->textlen) return;
 
   /* an arrow key (or something like that) was pressed in icon window.
@@ -1108,7 +1103,7 @@ static void doHexAsciiCmd(tv, hexval)
   else {  /* switch to ascii mode */
     pos = oldvscrl * 16;
     for (i=0; i<tv->numlines-1; i++) {
-      if (tv->lines[i+1] - tv->text > pos && 
+      if (tv->lines[i+1] - tv->text > pos &&
 	  tv->lines[i]   - tv->text <= pos) break;
     }
     if (i<tv->numlines-1) SCSetVal(&tv->vscrl, i);
@@ -1127,9 +1122,9 @@ static void computeText(tv)
   int   i,j,wide,maxwide,space;
   byte *sp;
 
-  if (!tv->text) { 
-    tv->numlines = tv->hexlines = 0;  
-    tv->lines = (char **) NULL; 
+  if (!tv->text) {
+    tv->numlines = tv->hexlines = 0;
+    tv->lines = (char **) NULL;
     return;
   }
 
@@ -1153,8 +1148,8 @@ static void computeText(tv)
 
   tv->lines[tv->numlines - 1] = tv->text + tv->textlen + 1;
 
-  /* each line has a trailing '\n' character, except for the last line, 
-     which has a trailing '\0' character.  In any case, all lines can 
+  /* each line has a trailing '\n' character, except for the last line,
+     which has a trailing '\0' character.  In any case, all lines can
      be printed by printing ((lines[n+1] - lines[n]) - 1) characters,
      starting with lines[n].
 
@@ -1164,13 +1159,13 @@ static void computeText(tv)
 
   /* compute length of longest line, when shown in 'ascii' mode.  Takes
      into account the fact that non-printing chars (<32 or >127) will be
-     shown in an 'expanded' form.  (<32 chars will be shown as '^A' 
+     shown in an 'expanded' form.  (<32 chars will be shown as '^A'
      (or whatever), and >127 chars will be shown as octal '\275') */
 
   maxwide = 0;
   for (i=0; i<tv->numlines-1; i++) {
     /* compute displayed width of line #i */
-    for (sp=(byte *) tv->lines[i], wide=0; sp<(byte *) tv->lines[i+1]-1; 
+    for (sp=(byte *) tv->lines[i], wide=0; sp<(byte *) tv->lines[i+1]-1;
 	 sp++) {
       if (*sp == '\011') {   /* tab to next multiple of 8 */
 	space = ((wide+8) & (~7)) - wide;

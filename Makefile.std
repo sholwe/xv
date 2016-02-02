@@ -2,7 +2,11 @@
 
 # your C compiler (and options) of choice
 CC = cc
-# CC = gcc -ansi
+#CC = gcc -ansi
+# note that -ansi kills __USE_MISC (gcc 2.95.3), which (at least in Linux)
+# determines whether stdlib.h includes prototypes for mktemp(), random(), etc.
+# (i.e., if you use it, you will get unnecessary compiler warnings)
+#CC = gcc
 
 # use this if you're using 'cc' on a DEC Alpha (OSF/1) or MIPS (Ultrix) system:
 # CC = cc -std1 -Olimit 750
@@ -14,8 +18,13 @@ CC = cc
 #       -Wuninitialized -Wparentheses
 
 
-CCOPTS = -O 
-
+CCOPTS = -O
+# these are the usual optimization and warning options for gcc; all such
+# warnings but one (mktemp() use) have been eliminated (at least on Linux):
+#CCOPTS = -O3 -Wall
+# for the next step up in gcc noise, try adding -W (but note that it adds a
+# huge number of unused-parameter and signed/unsigned comparison warnings):
+#CCOPTS = -O3 -Wall -W
 
 ### NOTE: Sun running OpenWindows:
 ### if you're using a SUN running OPENWINDOWS, you need to add these two
@@ -25,6 +34,10 @@ CCOPTS = -O
 ### In general, if your X11 include files and libX11.a library aren't in the
 ### 'standard' places in which the C compiler looks, you should add '-L' and
 ### '-I' options on the CCOPTS line to tell the compiler where said files are.
+
+
+# BeOS _may_ need to use a different version (below), but probably not
+CLEANDIR = cleandir
 
 
 ### Installation locations
@@ -38,7 +51,7 @@ buildit: all
 
 
 ########################### CONFIGURATION OPTIONS ############################
-### NOTE: be sure to check 'config.h', for a few other configuration options 
+### NOTE: be sure to check 'config.h', for a few other configuration options
 ##############################################################################
 
 ###
@@ -59,18 +72,25 @@ $(JPEGLIB):  $(JPEGDIR)/jconfig.h
 ### if, for whatever reason, you're unable to get the TIFF library to compile
 ### on your machine, *COMMENT OUT* the following lines
 ###
-TIFF    = -DDOTIFF
+### GRR 20050319:  USE_TILED_TIFF_BOTLEFT_FIX enables an experimental fix for
+###   tiled TIFFs with ORIENTATION_BOTLEFT.  It may break other tiled TIFFs,
+###   or it may be required for certain other TIFF types (e.g., strips with
+###   ORIENTATION_BOTLEFT).  I don't have a sufficient variety of TIFF test
+###   images at hand.
+###
+#TIFF    = -DDOTIFF
+TIFF    = -DDOTIFF -DUSE_TILED_TIFF_BOTLEFT_FIX
 TIFFDIR = tiff
 TIFFINC = -I$(TIFFDIR)
 TIFFLIB = $(TIFFDIR)/libtiff.a
 $(TIFFLIB):
-	( cd $(TIFFDIR) ; make CC='$(CC)' )
+	( cd $(TIFFDIR) ; make CC='$(CC)' COPTS='$(CCOPTS) $(MCHN)' )
 
 
 ###
 ### if, for whatever reason, you're unable to get the PDS/VICAR support
 ### to compile (xvpds.c, and vdcomp.c), *COMMENT OUT* the following line,
-### and also remove 'vdcomp' from the 'all:' dependancy 
+### and also remove 'vdcomp' from the 'all:' dependancy
 ###
 PDS = -DDOPDS
 
@@ -78,17 +98,25 @@ PDS = -DDOPDS
 #----------System V----------
 
 # if you are running on a SysV-based machine, such as HP, Silicon Graphics,
-# Solaris, etc., uncomment the following line to get mostly there.  
+# Solaris, etc., uncomment the following line to get mostly there.
 #UNIX = -DSVR4
 
 
-#----------Machine Specific Configurations----------
+#----------Machine-Specific Configurations----------
+
+### If you are using a BeOS system, uncomment the following line
+#MCHN = -DUSE_GETCWD -I/usr/X11/include -L/usr/X11/lib
+###
+### The stock version of cleandir now should work for BeOS, too, so try
+### leaving this commented out:
+#CLEANDIR = cleandir.BeOS
+
 
 ### If you are using an SGI system, uncomment the following line
 #MCHN = -Dsgi
 
 
-### For HP-UX, uncomment the following line:
+### For HP-UX, uncomment the following line
 #MCHN= -Dhpux -D_HPUX_SOURCE
 # To use old HP compilers (HPUX 7.0 or so), you may need
 #MCHN= -Dhpux -D_HPUX_SOURCE +Ns4000
@@ -102,22 +130,22 @@ PDS = -DDOPDS
 
 
 ### for LINUX, uncomment the following line
-#MCHN = -DLINUX
+#MCHN = -DLINUX -L/usr/X11R6/lib
 
 
 # For SCO 1.1 (UNIX 3.2v2) machines, uncomment the following:
 #MCHN = -Dsco -DPOSIX
 #
 # For ODT 2.0 (UNIX 3.2v4) machines, uncomment the following:
-#MCHN= -Dsco -DPOSIX -DNO_RANDOM 
+#MCHN= -Dsco -DPOSIX -DNO_RANDOM
 #
 # Also, you should add '-lc -lx' to the end of the LIBS def below
 # -lx must be after -lc so you get the right directory routines.
 
 
 # for UMAX V by Encore Computers uncomment the following line for
-# the portable c compiler, system specific definitions and
-# location of local X11 library(if site specific, modify -L option)
+# the portable C compiler, system-specific definitions and
+# location of local X11 library (if site-specific, modify -L option)
 # No other switches should be necessary, or so I'm told...
 #
 #MCHN = -q extensions=pcc_c -D__UMAXV__ -L/usr2/usr/lib/X11 -DSVR4
@@ -147,8 +175,8 @@ PDS = -DDOPDS
 #TIMERS = -DUSLEEP
 
 
-# if XV locks up whenever you click on *any* of the buttons, the Timer() 
-# function in xvmisc.c is going out to lunch.  A simple workaround is to 
+# if XV locks up whenever you click on *any* of the buttons, the Timer()
+# function in xvmisc.c is going out to lunch.  A simple workaround is to
 # uncomment the following line:
 #TIMERS = -DNOTIMER
 
@@ -160,7 +188,7 @@ PDS = -DDOPDS
 #DXWM = -DDXWM
 
 
-# if, during compilation, your system complains about the types 
+# if, during compilation, your system complains about the types
 # 'u_long', 'u_short', 'u_int', etc. as being undefined, uncomment the
 # following line:
 #BSDTYPES = -DBSDTYPES
@@ -188,7 +216,9 @@ CFLAGS = $(CCOPTS) $(JPEG) $(JPEGINC) $(TIFF) $(TIFFINC) $(PDS) \
 	$(NODIRENT) $(VPRINTF) $(TIMERS) $(UNIX) $(BSDTYPES) $(RAND) \
 	$(DXWM) $(MCHN)
 
+### remove -lm for BeOS:
 LIBS = -lX11 $(JPEGLIB) $(TIFFLIB) -lm
+#LIBS = -lX11 $(JPEGLIB) $(TIFFLIB)
 
 OBJS = 	xv.o xvevent.o xvroot.o xvmisc.o xvimage.o xvcolor.o xvsmooth.o \
 	xv24to8.o xvgif.o xvpm.o xvinfo.o xvctrl.o xvscrl.o xvalg.o \
@@ -231,9 +261,10 @@ xvclean:
 
 clean:  xvclean
 	rm -f bggen vdcomp xcmap xvpictoppm
-	./cleandir $(JPEGDIR)
-	rm -f $(JPEGDIR)/jconfig.h $(JPEGDIR)/Makefile
-	./cleandir $(TIFFDIR)
+#	clean only local jpeg and tiff dirs, not user's or system's copies:
+	./$(CLEANDIR) jpeg
+	rm -f jpeg/jconfig.h jpeg/Makefile
+	./$(CLEANDIR) tiff
 
 
 install: all
@@ -246,8 +277,9 @@ install: all
 	cp docs/xvdocs.ps* $(LIBDIR)
 
 tar:
+#	tar only local jpeg and tiff dirs, not user's or system's copies:
 	tar cvf xv.tar Makefile* Imakefile *.c *.h bits \
-		docs unsupt vms $(JPEGDIR) $(TIFFDIR) $(MISC) 
+		docs unsupt vms jpeg tiff $(MISC)
 
 xvtar:
 	tar cvf xv.tar Makefile* Imakefile *.c *.h bits
@@ -257,26 +289,26 @@ $(OBJS):   xv.h config.h
 
 ################# bitmap dependencies ####################
 
-xv.o:      	bits/icon bits/iconmask bits/runicon bits/runiconm
-xv.o:      	bits/cboard50 bits/gray25 
+xv.o:		bits/icon bits/iconmask bits/runicon bits/runiconm
+xv.o:		bits/cboard50 bits/gray25
 
 xvbrowse.o:	bits/br_file bits/br_dir bits/br_exe bits/br_chr bits/br_blk
-xvbrowse.o:	bits/br_sock bits/br_fifo bits/br_error bits/br_unknown
+xvbrowse.o:	bits/br_sock bits/br_fifo bits/br_error # bits/br_unknown
 xvbrowse.o:	bits/br_cmpres bits/br_gif bits/br_pm bits/br_pbm
 xvbrowse.o:	bits/br_sunras bits/br_bmp bits/br_utah bits/br_iris
-xvbrowse.o:	bits/br_pcx bits/br_jfif bits/br_tiff bits/br_pds 
+xvbrowse.o:	bits/br_pcx bits/br_jfif bits/br_tiff bits/br_pds
 xvbrowse.o:	bits/br_ps bits/br_iff bits/br_targa bits/br_xpm
 xvbrowse.o:	bits/br_trash bits/fcurs bits/fccurs bits/fdcurs bits/fcursm
-xvbrowse.o:     bits/br_xwd
+xvbrowse.o:	bits/br_xwd
 
 xvbutt.o:	bits/cboard50 bits/rb_frame bits/rb_frame1 bits/rb_top
 xvbutt.o:	bits/rb_bot bits/rb_dtop bits/rb_dbot bits/rb_body
 xvbutt.o:	bits/rb_dot bits/cb_check bits/mb_chk
 
 xvctrl.o:	bits/gray25 bits/gray50 bits/i_fifo bits/i_chr bits/i_dir
-xvctrl.o: 	bits/i_blk bits/i_lnk bits/i_sock bits/i_exe bits/i_reg
+xvctrl.o:	bits/i_blk bits/i_lnk bits/i_sock bits/i_exe bits/i_reg
 xvctrl.o:	bits/h_rotl bits/h_rotr bits/fliph bits/flipv bits/p10
-xvctrl.o:	bits/m10 bits/cut bits/copy bits/paste bits/clear 
+xvctrl.o:	bits/m10 bits/cut bits/copy bits/paste bits/clear
 xvctrl.o:	bits/uicon bits/oicon1 bits/oicon2 bits/icon
 xvctrl.o:	bits/padimg bits/annot
 
@@ -285,13 +317,13 @@ xvcut.o:	bits/cut bits/cutm bits/copy bits/copym
 xvdflt.o:	bits/logo_top bits/logo_bot bits/logo_out bits/xv_jhb
 xvdflt.o:	bits/xv_cpyrt bits/xv_rev bits/xv_ver
 xvdflt.o:	bits/xf_left bits/xf_right bits/font5x9.h
-xvdflt.o:       xvdflt.h
+xvdflt.o:	xvdflt.h
 
 xvdial.o:	bits/dial_cw1 bits/dial_ccw1 bits/dial_cw2 bits/dial_ccw2
 
 xvdir.o:	bits/d_load bits/d_save
 
-xvevent.o:	bits/dropper bits/dropperm bits/pen bits/penm 
+xvevent.o:	bits/dropper bits/dropperm bits/pen bits/penm
 xvevent.o:	bits/blur bits/blurm
 
 xvgam.o:	bits/h_rotl bits/h_rotr bits/h_flip bits/h_sinc bits/h_sdec
