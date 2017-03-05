@@ -1,0 +1,11 @@
+Im following these instructions.. 
+wget ftp://ftp.cis.upenn.edu/pub/xv/xv-3.10a.tar.gz 
+wget http://prdownloads.sourceforge.net/png-mng/xv-3.10a-jumbo-patches-2005050... 
+wget http://www.ulich.org/hints/resources/xv-3.10a-jumbo20050501-1.diff.gz 
+tar xvzf xv-3.10a.tar.gz 
+tar xvzf xv-3.10a-jumbo-patches-20050501.tar.gz 
+gzip -d xv-3.10a-jumbo20050501-1.diff.gz 
+cd xv-3.10a patch -p1 < ../xv-3.10a-jumbo-fix-patch-20050410.txt 
+patch -p1 < ../xv-3.10a-jumbo-enh-patch-20050501.txt 
+patch -p1 < ../xv-3.10a-jumbo20050501-1.diff 
+make 
