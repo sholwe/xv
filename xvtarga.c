@@ -36,7 +36,7 @@
 #include "xv.h"
 
 static long filesize;
-static char *bname;
+static const char *bname;
 
 
 /*******************************************/

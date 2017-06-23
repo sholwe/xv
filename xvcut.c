@@ -304,11 +304,12 @@ static void doPaste(cimg)
     char buf[512];
 
     if (clipis24) { /* pasting in a 24-bit image that *requires* promotion */
-      static char *bnames[] = { "\nOkay", "\033Cancel" };
+      static const char *labels[] = { "\nOkay", "\033Cancel" };
+
       strcpy(buf, "Warning:  Pasting this 24-bit image will require ");
       strcat(buf, "promoting the current image to 24 bits.");
 
-      if (PopUp(buf, bnames, 2)) goto exit;   /* Cancelled */
+      if (PopUp(buf, labels, 2)) goto exit;   /* Cancelled */
       else Change824Mode(PIC24);              /* promote pic to 24 bits */
     }
 
@@ -316,13 +317,14 @@ static void doPaste(cimg)
       ncc = countNewCols(clippic,clipw,cliph,clipcmap,clipis24,cx,cy,cw,ch);
 
       if (ncc + numcols > 256) {
-	static char *bnames[] = { "\nPromote", "8Keep 8-bit", "\033Cancel" };
+	static const char *labels[] = { "\nPromote", "8Keep 8-bit", "\033Cancel" };
+
 	strcpy(buf,"Warning:  The image and the clipboard combine to have ");
 	strcat(buf,"more than 256 unique colors.  Promoting the ");
 	strcat(buf,"image to 24 bits is recommended, otherwise the contents ");
 	strcat(buf,"of the clipboard will probably lose some colors.");
 
-	keep8 = PopUp(buf, bnames, 3);
+	keep8 = PopUp(buf, labels, 3);
 	if      (keep8==2) goto exit;              /* Cancel */
 	else if (keep8==0) Change824Mode(PIC24);   /* promote pic to 24 bits */
       }
@@ -964,7 +966,7 @@ static void clearSelectedArea()
 /********************************************/
 static void makeClipFName()
 {
-  char *homedir;
+  const char *homedir;
 
   if (clipfname) return;
 

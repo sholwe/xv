@@ -3516,11 +3516,11 @@ int cmd;
 {
     switch (cmd) {
     case T_BOK: {
-	char *fullname;
-	char buf[64], *x_offsetp, *y_offsetp;
-	static char *labels[] = { "\nOk", "\033Cancel" };
-        XEvent event;
-	int i;
+	char              *fullname;
+	char               buf[64], *x_offsetp, *y_offsetp;
+	static const char *labels[] = { "\nOk", "\033Cancel" };
+        XEvent             event;
+	int                i;
 
 	strcpy(buf, "0,0");
 	i = GetStrPopUp("Enter offset (x,y):", labels, 2, buf, 64,

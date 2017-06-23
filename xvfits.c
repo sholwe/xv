@@ -39,17 +39,17 @@ typedef struct {
 static char *fits_block=NULL;
 
 
-static int   splitfits  PARM((byte *, char *, int, int, int, char *));
-static char *ftopen3d   PARM((FITS *, char *, int *, int *, int *, int *));
-static void  ftclose    PARM((FITS *));
-static int   ftgbyte    PARM((FITS *, byte *, int));
-static char *rdheader   PARM((FITS *));
-static char *wrheader   PARM((FILE *, int, int, char *));
-static char *rdcard     PARM((char *, char *, DATTYPE, long int *));
-static void  wrcard     PARM((char *, char *, DATTYPE, int, char *));
-static int   ftgdata    PARM((FITS *, void *, int));
-static void  ftfixdata  PARM((FITS *, void *, int));
-static void  flip       PARM((byte *, int, int));
+static       int   splitfits PARM((byte *, char *, int, int, int, char *));
+static const char *ftopen3d  PARM((FITS *, char *, int *, int *, int *, int *));
+static       void  ftclose   PARM((FITS *));
+static       int   ftgbyte   PARM((FITS *, byte *, int));
+static const char *rdheader  PARM((FITS *));
+static const char *wrheader  PARM((FILE *, int, int, char *));
+static const char *rdcard    PARM((char *, const char *, DATTYPE, long int *));
+static       void  wrcard    PARM((char *, const char *, DATTYPE, int, char *));
+static       int   ftgdata   PARM((FITS *, void *, int));
+static       void  ftfixdata PARM((FITS *, void *, int));
+static       void  flip      PARM((byte *, int, int));
 
 
 
@@ -65,7 +65,7 @@ int LoadFITS(fname, pinfo, quick)
   FITS  fs;
   int   i, nx, ny, nz, bitpix, nrd, ioerror, npixels, bufsize;
   byte *image;
-  char *error;
+  const char *error;
   char  basename[64];
 
   if (fits_block == NULL) {
@@ -171,7 +171,7 @@ int WriteFITS(fp,pic,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle,comment)
 {
   int   i, j, npixels, nend;
   byte *ptr;
-  char *error;
+  const char *error;
   byte  rgb[256];
 
   if (!fits_block) {
@@ -230,7 +230,7 @@ static int splitfits(image, comment, nx, ny, nz, basename)
 
   int   i, npixels=nx * ny, nwrt, tmpfd;
   FILE *fp;
-  char *error;
+  const char *error;
   char  filename[70];
 
 #ifndef VMS
@@ -302,7 +302,7 @@ static int splitfits(image, comment, nx, ny, nz, basename)
 
 
 /************************************/
-static char *wrheader(fp, nx, ny, comment)
+static const char *wrheader(fp, nx, ny, comment)
      FILE *fp;
      int nx, ny;
      char *comment;
@@ -363,7 +363,7 @@ static char *wrheader(fp, nx, ny, comment)
 
 
 /************************************/
-static char *ftopen3d(fs, file, nx, ny, nz, bitpix)
+static const char *ftopen3d(fs, file, nx, ny, nz, bitpix)
      FITS *fs;
      char *file;
      int  *nx, *ny, *nz, *bitpix;
@@ -378,7 +378,7 @@ static char *ftopen3d(fs, file, nx, ny, nz, bitpix)
 
   FILE *fp;
   int naxis, i;
-  char *error;
+  const char *error;
 
   fp = xv_fopen(file, "r");
   if (!fp) return "Unable to open FITS file";
@@ -423,7 +423,7 @@ static void ftclose(fs)
 
 
 /************************************/
-static char *rdheader(fs)
+static const char *rdheader(fs)
      FITS *fs;
 {
   /* reads the fits header, and updates the FITS structure fs.
@@ -433,7 +433,7 @@ static char *rdheader(fs)
   int i, j, res, commlen, commsize;
   char name[9];
   char *block=fits_block, *p;
-  char *error;
+  const char *error;
   long int val;         /* the value */
 
   fs->comment = NULL;
@@ -548,7 +548,8 @@ static char *rdheader(fs)
 
 /************************************/
 static void wrcard(card, name, dtype, kvalue, svalue)
-     char *card, *name;
+     char *card;
+     const char *name;
      DATTYPE dtype;   /* type of value */
      int kvalue;
      char *svalue;
@@ -596,8 +597,9 @@ static void wrcard(card, name, dtype, kvalue, svalue)
 
 
 /************************************/
-static char *rdcard(card, name, dtype, kvalue)
-     char *card, *name;
+static const char *rdcard(card, name, dtype, kvalue)
+     char *card;
+     const char *name;
      DATTYPE dtype;   /* type of value */
      long int *kvalue;
 {

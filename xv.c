@@ -54,10 +54,14 @@ static int    clearonload;      /* clear window/root (on colormap visuals) */
 static int    randomShow = 0;   /* do a 'random' slideshow */
 static int    startIconic = 0;  /* '-iconic' option */
 static int    defaultVis  = 0;  /* true if using DefaultVisual */
+#ifdef HAVE_G3
+static int    fax = 0;          /* temporary(?) kludge */
+int           highresfax = 0;
+#endif
 static double hexpand = 1.0;    /* '-expand' argument */
 static double vexpand = 1.0;    /* '-expand' argument */
-static char  *maingeom = NULL;
-static char  *icongeom = NULL;
+static const char *maingeom = NULL;
+static const char *icongeom = NULL;
 static Atom   __SWM_VROOT = None;
 
 static char   basefname[128];   /* just the current fname, no path */
@@ -69,9 +73,13 @@ static char   basefname[128];   /* just the current fname, no path */
 #  ifndef TV_FONTSIZE
 #    define TV_FONTSIZE 14,16
 #  endif
-
 static int    mfontsize[] = { TV_FONTSIZE, 0 };
 static char   mfontset[256];
+#endif
+
+#ifdef HAVE_JP2K
+static byte jp2k_magic[12] =
+  { 0, 0, 0, 0x0c, 'j', 'P', ' ', ' ', 0x0d, 0x0a, 0x87, 0x0a };
 #endif
 
 
@@ -111,7 +119,7 @@ static void useOtherVisual           PARM((XVisualInfo *, int));
 static void parseResources           PARM((int, char **));
 static void parseCmdLine             PARM((int, char **));
 static void verifyArgs               PARM((void));
-static void printoption              PARM((char *));
+static void printoption              PARM((const char *));
 static void cmdSyntax                PARM((void));
 static void rmodeSyntax              PARM((void));
 static int  openPic                  PARM((int));
@@ -123,31 +131,33 @@ static void openNextLoop             PARM((void));
 static void openPrevPic              PARM((void));
 static void openNamedPic             PARM((void));
 static void mainLoop                 PARM((void));
-static void createMainWindow         PARM((char *, char *));
-static void setWinIconNames          PARM((char *));
+static void createMainWindow         PARM((const char *, const char *));
+static void setWinIconNames          PARM((const char *));
 static void makeDispNames            PARM((void));
 static void fixDispNames             PARM((void));
 static void deleteFromList           PARM((int));
-static int  argcmp                   PARM((char *, char *, int, int, int *));
+static int  argcmp                   PARM((const char *, const char *,
+                                           int, int, int *));
 static void add_filelist_to_namelist PARM((char *, char **, int *, int));
 
 
 /* formerly local vars in main, made local to this module when
    parseResources() and parseCmdLine() were split out of main() */
 
-int   imap, ctrlmap, gmap, browmap, cmtmap, clrroot, nopos, limit2x;
-char *display, *whitestr, *blackstr, *histr, *lostr,
-     *infogeom, *fgstr, *bgstr, *ctrlgeom, *gamgeom, *browgeom, *tmpstr;
-char *rootfgstr, *rootbgstr, *imagebgstr, *visualstr, *textgeom, *cmtgeom;
-char *monofontname, *flistName;
+static int   imap, ctrlmap, gmap, browmap, cmtmap, clrroot, nopos, limit2x;
+static const char *histr, *lostr, *fgstr, *bgstr, *tmpstr;
+static const char *infogeom, *ctrlgeom, *gamgeom, *browgeom, *textgeom, *cmtgeom;
+static char *display, *whitestr, *blackstr;
+static char *rootfgstr, *rootbgstr, *imagebgstr, *visualstr;
+static char *monofontname, *flistName;
 #ifdef TV_L10N
-char **misscharset, *defstr;
-int nmisscharset;
+static char **misscharset, *defstr;
+static int nmisscharset;
 #endif
-int  curstype, stdinflag, browseMode, savenorm, preview, pscomp, preset,
-     rmodeset, gamset, cgamset, perfect, owncmap, rwcolor, stdcmap;
-int  nodecor;
-double gamval, rgamval, ggamval, bgamval;
+static int  curstype, stdinflag, browseMode, savenorm, preview, pscomp, preset,
+            rmodeset, gamset, cgamset, perfect, owncmap, rwcolor, stdcmap;
+static int  nodecor;
+static double gamval, rgamval, ggamval, bgamval;
 
 /*******************************************/
 int main(argc, argv)
@@ -201,6 +211,10 @@ int main(argc, argv)
 
   picComments = (char *) NULL;
 
+  if (picExifInfo) free(picExifInfo);
+  picExifInfo = (byte *) NULL;
+  picExifInfoSize = 0;
+
   numPages = 1;  curPage = 0;
   pageBaseName[0] = '\0';
 
@@ -251,13 +265,12 @@ int main(argc, argv)
   cmd = (char *) rindex(argv[0],'/');
   if (!cmd) cmd = argv[0]; else cmd++;
 
-  tmpstr = (char *) getenv("TMPDIR");
-  if (!tmpstr) tmpdir = "/tmp";
-  else {
-    tmpdir = (char *) malloc(strlen(tmpstr) + 1);
-    if (!tmpdir) FatalError("can't malloc 'tmpdir'\n");
-    strcpy(tmpdir, tmpstr);
-  }
+  tmpstr = (const char *) getenv("TMPDIR");
+  if (!tmpstr) tmpstr = "/tmp";
+  tmpdir = (char *) malloc(strlen(tmpstr) + 1);
+  if (!tmpdir) FatalError("can't malloc 'tmpdir'\n");
+  strcpy(tmpdir, tmpstr);
+
 #ifdef AUTO_EXPAND
   Vdinit();
   vd_handler_setup();
@@ -306,9 +319,14 @@ int main(argc, argv)
   defaspect = normaspect = 1.0;
   mainW = dirW = infoW = ctrlW = gamW = psW = (Window) NULL;
   anyBrowUp = 0;
+  incrementalSearchTimeout = 30;
 
 #ifdef HAVE_JPEG
   jpegW = (Window) NULL;  jpegUp = 0;
+#endif
+
+#ifdef HAVE_JP2K
+  jp2kW = (Window) NULL;  jp2kUp = 0; 
 #endif
 
 #ifdef HAVE_TIFF
@@ -386,7 +404,7 @@ int main(argc, argv)
   if (spec_window) {
 	rootW = spec_window;
   } else {
-  	rootW = RootWindow(theDisp,theScreen);
+	rootW = RootWindow(theDisp,theScreen);
   }
   theGC     = DefaultGC(theDisp,theScreen);
   theVisual = DefaultVisual(theDisp,theScreen);
@@ -533,9 +551,6 @@ int main(argc, argv)
   }
 
 
-  if (!useroot && limit2x) { maxWIDE *= 2;  maxHIGH *= 2; }
-  if (nolimits) { maxWIDE = 65000; maxHIGH = 65000; }
-
   XSetErrorHandler(xvErrorHandler);
 
   /* always search for virtual root window */
@@ -555,7 +570,7 @@ int main(argc, argv)
 	  &bytesafter, (unsigned char **) &newRoot) == Success && newRoot) {
       vrootW = *(Window *)newRoot;
       XGetWindowAttributes(theDisp, vrootW, &xwa);
-      vrWIDE = xwa.width;  vrHIGH = xwa.height;
+      maxWIDE = vrWIDE = xwa.width;  maxHIGH = vrHIGH = xwa.height;
       dispDEEP = xwa.depth;
       break;
     }
@@ -564,7 +579,8 @@ int main(argc, argv)
   vrootW = pseudo_root(theDisp, theScreen);
 #endif
 
-
+  if (!useroot && limit2x) { maxWIDE *= 2;  maxHIGH *= 2; }
+  if (nolimits) { maxWIDE = 65000; maxHIGH = 65000; }
 
 
   if (clrroot || useroot) {
@@ -725,10 +741,10 @@ int main(argc, argv)
        (mfinfo = XLoadQueryFont(theDisp,FONT3))==NULL &&
        (mfinfo = XLoadQueryFont(theDisp,FONT4))==NULL &&
        (mfinfo = XLoadQueryFont(theDisp,FONT5))==NULL) {
-    sprintf(str,
+    sprintf(dummystr,
 	    "couldn't open the following fonts:\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s",
 	    FONT1, FONT2, FONT3, FONT4, FONT5);
-    FatalError(str);
+    FatalError(dummystr);
   }
   mfont=mfinfo->fid;
   XSetFont(theDisp,theGC,mfont);
@@ -746,10 +762,10 @@ int main(argc, argv)
 	(monofinfo = XLoadQueryFont(theDisp,MFONT2))==NULL &&
 	(monofinfo = XLoadQueryFont(theDisp,MFONT3))==NULL &&
 	(monofinfo = XLoadQueryFont(theDisp,MFONT4))==NULL) {
-      sprintf(str,"couldn't open %s fonts:\n\t%s\n\t%s\n\t%s\n\t%s",
+      sprintf(dummystr,"couldn't open %s fonts:\n\t%s\n\t%s\n\t%s\n\t%s",
 	      "any of the following",
 	      MFONT1, MFONT2, MFONT3, MFONT4);
-      FatalError(str);
+      FatalError(dummystr);
     }
   }
 
@@ -797,14 +813,14 @@ int main(argc, argv)
 
 #  if 0
     if (nmisscharset > 0) {
-      sprintf(str,"missing %d charset:\n", nmisscharset);
+      sprintf(dummystr,"missing %d charset:\n", nmisscharset);
       for (i = 0; i < nmisscharset; i++) {
-	sprintf(str, "%s\t%s\n", str, misscharset[i]);
+	sprintf(dummystr, "%s\t%s\n", dummystr, misscharset[i]);
       }
 #    if 0
-      FatalError(str);
+      FatalError(dummystr);
 #    else
-      fprintf(stderr, "%s", str);
+      fprintf(stderr, "%s", dummystr);
 #    endif
     }
 #  endif
@@ -947,6 +963,11 @@ int main(argc, argv)
 #ifdef HAVE_JPEG
   CreateJPEGW();
   XSetTransientForHint(theDisp, jpegW, dirW);
+#endif
+
+#ifdef HAVE_JP2K
+  CreateJP2KW();
+  XSetTransientForHint(theDisp, jp2kW, dirW);
 #endif
 
 #ifdef HAVE_TIFF
@@ -1144,7 +1165,7 @@ static void useOtherVisual(vinfo, best)
   if (spec_window) {
 	rootW = spec_window;
   } else {
-  	rootW = RootWindow(theDisp,theScreen);
+	rootW = RootWindow(theDisp,theScreen);
   }
   ncells    = vinfo[best].colormap_size;
   theCmap   = XCreateColormap(theDisp, rootW, theVisual, AllocNone);
@@ -1195,25 +1216,25 @@ static void parseResources(argc, argv)
   /* once through the argument list to find the display name
      and DEBUG level, if any */
 
-  for (i=1; i<argc; i++) {
+  for (i=1; i<argc; ++i) {
     if (!strncmp(argv[i],"-help", (size_t) 5)) {  /* help */
       cmdSyntax();
       exit(0);
     }
 
     else if (!argcmp(argv[i],"-display",4,0,&pm)) {
-      i++;
+      ++i;
       if (i<argc) display = argv[i];
       break;
     }
 
-#ifdef VMS    /* in VMS, cmd-line-opts are in lower case */
+#ifdef VMS    /* in VMS, cmd-line opts are in lower case */
     else if (!argcmp(argv[i],"-debug",3,0,&pm)) {
-      { if (++i<argc) DEBUG = atoi(argv[i]); }
+      if (++i<argc) DEBUG = atoi(argv[i]);
     }
 #else
     else if (!argcmp(argv[i],"-DEBUG",2,0,&pm)) {
-      { if (++i<argc) DEBUG = atoi(argv[i]); }
+      if (++i<argc) DEBUG = atoi(argv[i]);
     }
 #endif
   }
@@ -1259,6 +1280,7 @@ static void parseResources(argc, argv)
   if (rd_flag("ctrlMap"))        ctrlmap     = def_int;
   if (rd_int ("cursor"))         curstype    = def_int;
   if (rd_int ("defaultPreset"))  preset      = def_int;
+  if (rd_int ("incrementalSearchTimeout"))  incrementalSearchTimeout = def_int;
 
   if (rd_str ("driftKludge")) {
     if (sscanf(def_str,"%d %d", &kludge_offx, &kludge_offy) != 2) {
@@ -1331,7 +1353,7 @@ static void parseResources(argc, argv)
   if (rd_flag("reverse"))        revvideo    = def_int;
   if (rd_str ("rootBackground")) rootbgstr   = def_str;
   if (rd_str ("rootForeground")) rootfgstr   = def_str;
-  if (rd_int ("rootMode"))       { rootMode    = def_int;  rmodeset++; }
+  if (rd_int ("rootMode"))       { rootMode    = def_int;  ++rmodeset; }
   if (rd_flag("rwColor"))        rwcolor     = def_int;
   if (rd_flag("saveNormal"))     savenorm    = def_int;
   if (rd_str ("searchDirectory"))  strcpy(searchdir, def_str);
@@ -1346,6 +1368,19 @@ static void parseResources(argc, argv)
   if (rd_flag("vsMap"))          browmap     = def_int;
   if (rd_flag("vsPerfect"))      browPerfect = def_int;
   if (rd_str ("white"))          whitestr    = def_str;
+  
+  /* Check for any command-bindings to the supported function keys */
+#define TMPLEN 80
+  for (i=0; i<FSTRMAX; ++i) {
+    char tmp[TMPLEN];
+
+    snprintf(tmp, TMPLEN, "F%dcommand", i+1);
+    if (rd_str(tmp))
+      fkeycmds[i] = def_str;
+    else
+      fkeycmds[i] = NULL;
+  }  
+#undef TMPLEN
 }
 
 
@@ -1383,22 +1418,22 @@ static void parseCmdLine(argc, argv)
 	namelist[numnames++] = argv[i];
 #endif
 	if (numnames==MAXNAMES) {
-	  fprintf(stderr,"%s: too many filenames.  Only using first %d.\n",
+	  fprintf(stderr,"%s: too many filenames.  Using only first %d.\n",
 		  cmd, MAXNAMES);
 	}
       }
     }
 
-    else if (!strcmp(argv[i],  "-"))                    /* stdin flag */
+    else if (!strcmp(argv[i],  "-"))                       /* stdin flag */
       stdinflag++;
 
-    else if (!argcmp(argv[i],"-24",     3,1,&force24 ));  /* force24 */
-    else if (!argcmp(argv[i],"-2xlimit",3,1,&limit2x ));  /* 2xlimit */
-    else if (!argcmp(argv[i],"-4x3",    2,1,&auto4x3 ));  /* 4x3 */
-    else if (!argcmp(argv[i],"-8",      2,1,&force8  ));  /* force8 */
-    else if (!argcmp(argv[i],"-acrop",  3,1,&autocrop));  /* autocrop */
-
-    else if (!argcmp(argv[i],"-aspect",3,0,&pm)) {        /* def. aspect */
+    else if (!argcmp(argv[i],"-24",     3,1,&force24 ));   /* force24 */
+    else if (!argcmp(argv[i],"-2xlimit",3,1,&limit2x ));   /* 2xlimit */
+    else if (!argcmp(argv[i],"-4x3",    2,1,&auto4x3 ));   /* 4x3 */
+    else if (!argcmp(argv[i],"-8",      2,1,&force8  ));   /* force8 */
+    else if (!argcmp(argv[i],"-acrop",  3,1,&autocrop));   /* autocrop */
+                                                          
+    else if (!argcmp(argv[i],"-aspect",3,0,&pm)) {         /* def. aspect */
       int n,d;
       if (++i<argc) {
 	if (sscanf(argv[i],"%d:%d",&n,&d)!=2 || n<1 || d<1)
@@ -1415,26 +1450,26 @@ static void parseCmdLine(argc, argv)
       }
     }
 
-    else if (!argcmp(argv[i],"-best24",3,0,&pm))          /* -best */
+    else if (!argcmp(argv[i],"-best24",3,0,&pm))           /* -best */
       conv24 = CONV24_BEST;
 
-    else if (!argcmp(argv[i],"-bg",3,0,&pm))              /* bg color */
+    else if (!argcmp(argv[i],"-bg",3,0,&pm))               /* bg color */
       { if (++i<argc) bgstr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-black",3,0,&pm))           /* black color */
+    else if (!argcmp(argv[i],"-black",3,0,&pm))            /* black color */
       { if (++i<argc) blackstr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-bw",3,0,&pm))              /* border width */
+    else if (!argcmp(argv[i],"-bw",3,0,&pm))               /* border width */
       { if (++i<argc) bwidth=atoi(argv[i]); }
 
-    else if (!argcmp(argv[i],"-cecmap",4,1,&cmapInGam));  /* cmapInGam */
+    else if (!argcmp(argv[i],"-cecmap",4,1,&cmapInGam));   /* cmapInGam */
 
-    else if (!argcmp(argv[i],"-cegeometry",4,0,&pm))      /* gammageom */
+    else if (!argcmp(argv[i],"-cegeometry",4,0,&pm))       /* gammageom */
       { if (++i<argc) gamgeom = argv[i]; }
 
-    else if (!argcmp(argv[i],"-cemap",4,1,&gmap));        /* gmap */
+    else if (!argcmp(argv[i],"-cemap",4,1,&gmap));         /* gmap */
 
-    else if (!argcmp(argv[i],"-cgamma",4,0,&pm)) {        /* color gamma */
+    else if (!argcmp(argv[i],"-cgamma",4,0,&pm)) {         /* color gamma */
       if (i+3<argc) {
 	rgamval = atof(argv[++i]);
 	ggamval = atof(argv[++i]);
@@ -1443,19 +1478,19 @@ static void parseCmdLine(argc, argv)
       cgamset++;
     }
 
-    else if (!argcmp(argv[i],"-cgeometry",4,0,&pm))	  /* ctrlgeom */
+    else if (!argcmp(argv[i],"-cgeometry",4,0,&pm))	   /* ctrlgeom */
       { if (++i<argc) ctrlgeom = argv[i]; }
 
-    else if (!argcmp(argv[i],"-clear",4,1,&clrroot));	  /* clear */
-    else if (!argcmp(argv[i],"-close",4,1,&autoclose));	  /* close */
-    else if (!argcmp(argv[i],"-cmap", 3,1,&ctrlmap));	  /* ctrlmap */
+    else if (!argcmp(argv[i],"-clear",4,1,&clrroot));	   /* clear */
+    else if (!argcmp(argv[i],"-close",4,1,&autoclose));	   /* close */
+    else if (!argcmp(argv[i],"-cmap", 3,1,&ctrlmap));	   /* ctrlmap */
 
-    else if (!argcmp(argv[i],"-cmtgeometry",5,0,&pm))	  /* comment geom */
+    else if (!argcmp(argv[i],"-cmtgeometry",5,0,&pm))	   /* comment geom */
       { if (++i<argc) cmtgeom = argv[i]; }
 
-    else if (!argcmp(argv[i],"-cmtmap",5,1,&cmtmap));	  /* map cmt window */
+    else if (!argcmp(argv[i],"-cmtmap",5,1,&cmtmap));	   /* map cmt window */
 
-    else if (!argcmp(argv[i],"-crop",3,0,&pm)) {          /* crop */
+    else if (!argcmp(argv[i],"-crop",3,0,&pm)) {           /* crop */
       if (i+4<argc) {
 	acropX = atoi(argv[++i]);
 	acropY = atoi(argv[++i]);
@@ -1465,7 +1500,7 @@ static void parseCmdLine(argc, argv)
       acrop++;
     }
 
-    else if (!argcmp(argv[i],"-cursor",3,0,&pm))	  /* cursor */
+    else if (!argcmp(argv[i],"-cursor",3,0,&pm))	   /* cursor */
       { if (++i<argc) curstype = atoi(argv[i]); }
 
 #ifdef VMS    /* in VMS, cmd-line-opts are in lower case */
@@ -1478,22 +1513,22 @@ static void parseCmdLine(argc, argv)
     }
 #endif
 
-    else if (!argcmp(argv[i],"-dir",4,0,&pm))             /* search dir */
+    else if (!argcmp(argv[i],"-dir",4,0,&pm))              /* search dir */
       { if (++i<argc) strcpy(searchdir, argv[i]); }
 
-    else if (!argcmp(argv[i],"-display",4,0,&pm))         /* display */
+    else if (!argcmp(argv[i],"-display",4,0,&pm))          /* display */
       { if (++i<argc) display = argv[i]; }
 
-    else if (!argcmp(argv[i],"-dither",4,1,&autodither)); /* autodither */
+    else if (!argcmp(argv[i],"-dither",4,1,&autodither));  /* autodither */
 
-    else if (!argcmp(argv[i],"-drift",3,0,&pm)) {         /* drift kludge */
+    else if (!argcmp(argv[i],"-drift",3,0,&pm)) {          /* drift kludge */
       if (i<argc-2) {
 	kludge_offx = atoi(argv[++i]);
 	kludge_offy = atoi(argv[++i]);
       }
     }
 
-    else if (!argcmp(argv[i],"-expand",2,0,&pm)) {	  /* expand factor */
+    else if (!argcmp(argv[i],"-expand",2,0,&pm)) {	   /* expand factor */
       if (++i<argc) {
 	if (index(argv[i], ':')) {
 	  if (sscanf(argv[i], "%lf:%lf", &hexpand, &vexpand)!=2)
@@ -1503,42 +1538,50 @@ static void parseCmdLine(argc, argv)
       }
     }
 
-    else if (!argcmp(argv[i],"-fg",3,0,&pm))              /* fg color */
+#ifdef HAVE_G3
+    else if (!argcmp(argv[i],"-fax",3,0,&highresfax));     /* fax */
+#endif
+
+    else if (!argcmp(argv[i],"-fg",3,0,&pm))               /* fg color */
       { if (++i<argc) fgstr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-fixed",5,1,&fixedaspect)); /* fix asp. ratio */
+    else if (!argcmp(argv[i],"-fixed",5,1,&fixedaspect));  /* fix asp. ratio */
 
 #ifdef ENABLE_FIXPIX_SMOOTH
     else if (!argcmp(argv[i],"-fixpix",5,1,&do_fixpix_smooth)); /* dithering */
 #endif
 
-    else if (!argcmp(argv[i],"-flist",3,0,&pm))           /* file list */
+    else if (!argcmp(argv[i],"-flist",3,0,&pm))            /* file list */
       { if (++i<argc) flistName = argv[i]; }
 
-    else if (!argcmp(argv[i],"-gamma",3,0,&pm))	          /* gamma */
+    else if (!argcmp(argv[i],"-gamma",3,0,&pm))	           /* gamma */
       { if (++i<argc) gamval = atof(argv[i]);  gamset++; }
 
-    else if (!argcmp(argv[i],"-geometry",3,0,&pm))	  /* geometry */
+    else if (!argcmp(argv[i],"-geometry",3,0,&pm))	   /* geometry */
       { if (++i<argc) maingeom = argv[i]; }
 
-    else if (!argcmp(argv[i],"-grabdelay",3,0,&pm))	  /* grabDelay */
+    else if (!argcmp(argv[i],"-grabdelay",3,0,&pm))	   /* grabDelay */
       { if (++i<argc) grabDelay = atoi(argv[i]); }
 
-    else if (!argcmp(argv[i],"-gsdev",4,0,&pm))	          /* gsDevice */
+    else if (!argcmp(argv[i],"-gsdev",4,0,&pm))	           /* gsDevice */
       { if (++i<argc) gsDev = argv[i]; }
 
-    else if (!argcmp(argv[i],"-gsgeom",4,0,&pm))          /* gsGeometry */
+    else if (!argcmp(argv[i],"-gsgeom",4,0,&pm))           /* gsGeometry */
       { if (++i<argc) gsGeomStr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-gsres",4,0,&pm))           /* gsResolution */
+    else if (!argcmp(argv[i],"-gsres",4,0,&pm))            /* gsResolution */
       { if (++i<argc) gsRes=abs(atoi(argv[i])); }
 
-    else if (!argcmp(argv[i],"-hflip",3,1,&autohflip));   /* hflip */
+    else if (!argcmp(argv[i],"-hflip",3,1,&autohflip));    /* hflip */
 
-    else if (!argcmp(argv[i],"-hi",3,0,&pm))	          /* highlight */
+    else if (!argcmp(argv[i],"-hi",3,0,&pm))	           /* highlight */
       { if (++i<argc) histr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-hist", 4,1,&autohisteq));  /* hist eq */
+#ifdef HAVE_G3
+    else if (!argcmp(argv[i],"-highresfax",4,0,&highresfax));/* high res. fax */
+#endif
+
+    else if (!argcmp(argv[i],"-hist", 4,1,&autohisteq));   /* hist eq */
 
     else if (!argcmp(argv[i],"-hsv",   3,1,&hsvmode));     /* hsvmode */
 
@@ -1550,14 +1593,14 @@ static void parseCmdLine(argc, argv)
     else if (!argcmp(argv[i],"-igeometry",3,0,&pm))        /* infogeom */
       { if (++i<argc) infogeom = argv[i]; }
 
-    else if (!argcmp(argv[i],"-imap",     3,1,&imap));        /* imap */
+    else if (!argcmp(argv[i],"-imap",3,1,&imap));          /* imap */
 
-    else if (!argcmp(argv[i],"-ibg",3,0,&pm)) /* GRR: image background color */
+    else if (!argcmp(argv[i],"-ibg",3,0,&pm))             /* image bkgd color */
       { if (++i<argc) imagebgstr = argv[i]; }
 
-    else if (!argcmp(argv[i],"-lbrowse",  3,1,&browseMode));  /* browse mode */
+    else if (!argcmp(argv[i],"-lbrowse",3,1,&browseMode)); /* browse mode */
 
-    else if (!argcmp(argv[i],"-lo",3,0,&pm))	        /* lowlight */
+    else if (!argcmp(argv[i],"-lo",3,0,&pm))	           /* lowlight */
       { if (++i<argc) lostr = argv[i]; }
 
     else if (!argcmp(argv[i],"-loadclear",4,1,&clearonload)); /* clearonload */
@@ -1783,8 +1826,8 @@ static void verifyArgs()
   defaultCmapMode = colorMapMode;  /* default mode for 8-bit images */
 
   if (nopos) {
-    maingeom = infogeom = ctrlgeom = gamgeom = browgeom = textgeom = NULL;
-    cmtgeom = NULL;
+    maingeom = infogeom = ctrlgeom = gamgeom = browgeom = textgeom = cmtgeom =
+      (const char *) NULL;
   }
 
   /* if -root and -maxp, disallow 'integer' tiling modes */
@@ -1795,11 +1838,11 @@ static void verifyArgs()
 
 
 
+static int cpos = 0;
 
 /***********************************/
-static int cpos = 0;
 static void printoption(st)
-     char *st;
+     const char *st;
 {
   if (strlen(st) + cpos > 78) {
     fprintf(stderr,"\n   ");
@@ -1810,12 +1853,16 @@ static void printoption(st)
   cpos = cpos + strlen(st) + 1;
 }
 
+
 static void cmdSyntax()
 {
   /* GRR 19980605:  added version info for most common libraries */
   fprintf(stderr, "XV - %s.\n", REVDATE);
 #ifdef HAVE_JPEG
   VersionInfoJPEG();
+#endif
+#ifdef HAVE_JP2K
+  VersionInfoJP2K();
 #endif
 #ifdef HAVE_TIFF
   VersionInfoTIFF();
@@ -1863,6 +1910,9 @@ static void cmdSyntax()
   printoption("[-/+dither]");
   printoption("[-drift dx dy]");
   printoption("[-expand exp | hexp:vexp]");
+#ifdef HAVE_G3
+  printoption("[-fax]");
+#endif
   printoption("[-fg color]");
   printoption("[-/+fixed]");
 #ifdef ENABLE_FIXPIX_SMOOTH
@@ -1878,6 +1928,9 @@ static void cmdSyntax()
   printoption("[-help]");
   printoption("[-/+hflip]");
   printoption("[-hi color]");
+#ifdef HAVE_G3
+  printoption("[-highresfax]");
+#endif
   printoption("[-/+hist]");
   printoption("[-/+hsv]");
   printoption("[-ibg color]");  /* GRR 19980314 */
@@ -1987,7 +2040,7 @@ static void rmodeSyntax()
 
 /***********************************/
 static int argcmp(a1, a2, minlen, plusallowed, plusminus)
-     char *a1, *a2;
+     const char *a1, *a2;
      int  minlen, plusallowed;
      int *plusminus;
 {
@@ -2118,8 +2171,7 @@ static int openPic(filenum)
     i = LoadPad(&pinfo, fullfname);
     fullname = fullfname;
     strcpy(filename, fullfname);
-    tmp = BaseName(fullfname);
-    strcpy(basefname, tmp);
+    strcpy(basefname, BaseName(fullfname));
 
     if (!i) goto FAILED;   /* shouldn't happen */
 
@@ -2171,14 +2223,14 @@ static int openPic(filenum)
 #ifdef AUTO_EXPAND
   else {
     fullname = (char *) malloc(MAXPATHLEN+2);
-    strcpy(fullname, namelist[filenum]);
+    strcpy(fullname, namelist[filenum]);   // 1 of 2 places fullname != const
     freename = 1;
   }
   tmp = (char *) rindex(fullname, '/');
   if (tmp) {
-      *tmp = '\0';
-      Mkvdir(fullname);
-      *tmp = '/';
+    *tmp = '\0';			   // 2 of 2 places fullname != const
+    Mkvdir(fullname);
+    *tmp = '/';
   }
   Dirtovd(fullname);
 #else
@@ -2186,8 +2238,7 @@ static int openPic(filenum)
 #endif
 
   strcpy(fullfname, fullname);
-  tmp = BaseName(fullname);
-  strcpy(basefname, tmp);
+  strcpy(basefname, BaseName(fullname));
 
 
   /* chop off trailing ".Z", ".z", or ".gz" from displayed basefname, if any */
@@ -2572,6 +2623,8 @@ ms_auto_no:
   strcpy(formatStr, pinfo.shrtInfo);
   picComments = pinfo.comment;
   ChangeCommentText();
+  picExifInfo = pinfo.exifInfo;
+  picExifInfoSize = pinfo.exifInfoSize;
 
   for (i=0; i<256; i++) {
     rMap[i] = pinfo.r[i];
@@ -2956,7 +3009,7 @@ int ReadFileType(fname)
   byte  magicno[30];    /* first 30 bytes of file */
   int   rv=RFT_UNKNOWN, n;
 #ifdef MACBINARY
-  int macbin_alrchk = False;
+  int   macbin_alrchk = False;
 #endif
 
   if (!fname) return RFT_ERROR;   /* shouldn't happen */
@@ -2967,10 +3020,16 @@ int ReadFileType(fname)
   if (strlen(fname) > 4 &&
       strcasecmp(fname+strlen(fname)-5, ".wbmp")==0)          rv = RFT_WBMP;
 
-  n = fread(magicno, (size_t) 1, (size_t) 30, fp);
+  n = fread(magicno, (size_t) 1, sizeof(magicno), fp);
   fclose(fp);
 
-  if (n<30) return rv;    /* files less than 30 bytes long... */
+  if (n<=0) return RFT_UNKNOWN;
+
+  /* it is just barely possible that a few files could legitimately be as small
+     as 30 bytes (e.g., binary P{B,G,P}M format), so zero out rest of "magic
+     number" buffer and don't quit immediately if we read something small but
+     not empty */
+  if (n<30) memset(magicno+n, 0, sizeof(magicno)-n);
 
 #ifdef MACBINARY
   macb_file = False;
@@ -3045,6 +3104,13 @@ int ReadFileType(fname)
 	   magicno[2]==0xff)                                  rv = RFT_JFIF;
 #endif
 
+#ifdef HAVE_JP2K
+  else if (magicno[0]==0xff && magicno[1]==0x4f && 
+           magicno[2]==0xff && magicno[3]==0x51)              rv = RFT_JPC;
+
+  else if (memcmp(magicno, jp2k_magic, sizeof(jp2k_magic))==0) rv = RFT_JP2;
+#endif
+
 #ifdef HAVE_TIFF
   else if ((magicno[0]=='M' && magicno[1]=='M') ||
 	   (magicno[0]=='I' && magicno[1]=='I'))              rv = RFT_TIFF;
@@ -3068,6 +3134,14 @@ int ReadFileType(fname)
   else if (strncmp((char *) magicno, "%!",     (size_t) 2)==0 ||
 	   strncmp((char *) magicno, "\004%!", (size_t) 3)==0 ||
            strncmp((char *) magicno, "%PDF",   (size_t) 4)==0) rv = RFT_PS;
+#endif
+
+#ifdef HAVE_G3
+  else if ((magicno[0]==  1 && magicno[1]==  1 &&
+            magicno[2]== 77 && magicno[3]==154 &&
+            magicno[4]==128 && magicno[5]==  0 &&
+            magicno[6]==  1 && magicno[7]== 77)
+           || highresfax || fax) /* kludge! */                rv = RFT_G3;
 #endif
 
 #ifdef HAVE_MAG
@@ -3171,6 +3245,11 @@ int ReadPicFile(fname, ftype, pinfo, quick)
   case RFT_JFIF:    rv = LoadJFIF  (fname, pinfo, quick);  break;
 #endif
 
+#ifdef HAVE_JP2K
+  case RFT_JPC:     rv = LoadJPC   (fname, pinfo, quick);  break;
+  case RFT_JP2:     rv = LoadJP2   (fname, pinfo, quick);  break;
+#endif
+
 #ifdef HAVE_TIFF
   case RFT_TIFF:    rv = LoadTIFF  (fname, pinfo, quick);  break;
 #endif
@@ -3181,6 +3260,10 @@ int ReadPicFile(fname, ftype, pinfo, quick)
 
 #ifdef HAVE_PDS
   case RFT_PDSVICAR: rv = LoadPDS  (fname, pinfo);         break;
+#endif
+
+#ifdef HAVE_G3
+  case RFT_G3:      rv = LoadG3    (fname, pinfo);         break;
 #endif
 
 #ifdef GS_PATH
@@ -3401,6 +3484,10 @@ void KillPageFiles(bname, numpages)
     sprintf(tmp, "%s%d", bname, i);
     unlink(tmp);
   }
+
+  /* GRR 20070506:  basename file doesn't go away, at least on Linux and for
+   *   GIF and TIFF images, so explicitly unlink() it, too */
+  unlink(bname);
 }
 
 
@@ -3738,7 +3825,7 @@ static void mainLoop()
 
 /***********************************/
 static void createMainWindow(geom, name)
-     char *geom, *name;
+     const char *geom, *name;
 {
   XSetWindowAttributes xswa;
   unsigned long        xswamask;
@@ -3764,30 +3851,35 @@ static void createMainWindow(geom, name)
   i = XParseGeometry(geom,&x,&y,&w,&h);
 
   hints.flags = 0;
-  if ((i&XValue || i&YValue)) hints.flags = USPosition;
+  if (i&XValue || i&YValue)
+      hints.flags |= USPosition;
 
   hints.win_gravity = NorthWestGravity;
   if (i&XValue && i&XNegative) {
     hints.win_gravity = NorthEastGravity;
-    x = vrWIDE - (eWIDE + 2 * bwidth) - abs(x);
+    x = vrWIDE - (eWIDE + 2 * bwidth) - x;
   }
   if (i&YValue && i&YNegative) {
     hints.win_gravity = (hints.win_gravity == NorthWestGravity) ?
       SouthWestGravity : SouthEastGravity;
-    y = vrHIGH - (eHIGH + 2 * bwidth) - abs(y);
+    y = vrHIGH - (eHIGH + 2 * bwidth) - y;
   }
+  hints.flags |= PWinGravity;
 
-  if (x+eWIDE > vrWIDE) x = vrWIDE - eWIDE;   /* keep on screen */
+  /* keep on screen */
+  if (x+eWIDE > vrWIDE) x = vrWIDE - eWIDE;
   if (y+eHIGH > vrHIGH) y = vrHIGH - eHIGH;
-
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
 
 #define VROOT_TRANS
 #ifdef VROOT_TRANS
-  if (vrootW != rootW) { /* virtual window manager running */
+  if (vrootW != rootW && !(hints.flags & USPosition)) { /* virtual window manager running */
     int x1,y1;
     Window child;
+
     XTranslateCoordinates(theDisp, rootW, vrootW, x, y, &x1, &y1, &child);
-    if (DEBUG) fprintf(stderr,"translate:  %d,%d -> %d,%d\n",x,y,x1,y1);
+    if (DEBUG) fprintf(stderr,"translate:  %d,%d -> %d,%d\n", x, y, x1, y1);
     x = x1;  y = y1;
   }
 #endif
@@ -3795,9 +3887,9 @@ static void createMainWindow(geom, name)
   hints.x = x;                  hints.y = y;
   hints.width = eWIDE;          hints.height = eHIGH;
   hints.max_width  = maxWIDE;   hints.max_height = maxHIGH;
-  hints.flags |= USSize | PMaxSize | PWinGravity;
+  hints.flags |= PSize | PMaxSize;
 
-  xswa.bit_gravity = StaticGravity;
+  xswa.bit_gravity      = StaticGravity;
   xswa.background_pixel = bg;
   xswa.border_pixel     = fg;
   xswa.colormap         = theCmap;
@@ -3821,8 +3913,8 @@ static void createMainWindow(geom, name)
     xwa.width = eWIDE;  xwa.height = eHIGH;
 
     /* try to keep the damned thing on-screen, if possible */
-    if (xwa.x + xwa.width  > dispWIDE) xwa.x = dispWIDE - xwa.width;
-    if (xwa.y + xwa.height > dispHIGH) xwa.y = dispHIGH - xwa.height;
+    if (xwa.x + xwa.width  > vrWIDE) xwa.x = vrWIDE - xwa.width;
+    if (xwa.y + xwa.height > vrHIGH) xwa.y = vrHIGH - xwa.height;
     if (xwa.x < 0) xwa.x = 0;
     if (xwa.y < 0) xwa.y = 0;
 
@@ -3906,7 +3998,7 @@ static void createMainWindow(geom, name)
 
 /***********************************/
 static void setWinIconNames(name)
-     char *name;
+     const char *name;
 {
   char winname[256], iconname[256];
 
@@ -3936,8 +4028,8 @@ static void setWinIconNames(name)
 
 /***********************************/
 void FixAspect(grow,w,h)
-int   grow;
-int   *w, *h;
+     int   grow;
+     int   *w, *h;
 {
   /* computes new values of eWIDE and eHIGH which will have aspect ratio
      'normaspect'.  If 'grow' it will preserve aspect by enlarging,
@@ -4072,7 +4164,7 @@ void StickInCtrlList(select)
 
 /***********************************/
 void AddFNameToCtrlList(fpath,fname)
-     char *fpath, *fname;
+     const char *fpath, *fname;
 {
   /* stick given path/name into 'namelist'.  Doesn't redraw list */
 
@@ -4176,7 +4268,8 @@ int DeleteCmd()
      in which case the 'selected' filename on the ctrl list is now
      different, and should be auto-loaded, or something */
 
-  static char *bnames[] = { "\004Disk File", "\nList Entry", "\033Cancel" };
+  static const char *bnames[] =
+    { "\004Disk File", "\nList Entry", "\033Cancel" };
   char str[512];
   int  del, i, delnum, rv;
 
@@ -4184,8 +4277,7 @@ int DeleteCmd()
   delnum = nList.selected;
   if (delnum < 0 || delnum >= numnames) return 0;
 
-  sprintf(str,"Delete '%s'?\n\n%s%s",
-	  namelist[delnum],
+  sprintf(str, "Delete '%s'?\n\n%s%s", namelist[delnum],
 	  "'List Entry' deletes selection from list.\n",
 	  "'Disk File' deletes file associated with selection.");
 
@@ -4497,7 +4589,7 @@ static void add_filelist_to_namelist(flist, nlist, numn, maxn)
 
 
   if (*numn == maxn) {
-    fprintf(stderr, "%s: too many filenames.  Only using first %d.\n",
+    fprintf(stderr, "%s: too many filenames.  Using only first %d.\n",
 	    flist, maxn);
   }
 
@@ -4521,7 +4613,7 @@ char *lower_str(str)
 
 /***********************************/
 int rd_int(name)
-     char *name;
+     const char *name;
 {
   /* returns '1' if successful.  result in def_int */
 
@@ -4539,7 +4631,7 @@ int rd_int(name)
 
 /***********************************/
 int rd_str(name)
-     char *name;
+     const char *name;
 {
   return rd_str_cl(name, "", 0);
 }
@@ -4547,7 +4639,7 @@ int rd_str(name)
 
 /***********************************/
 int rd_flag(name)
-char *name;
+     const char *name;
 {
   /* returns '1' if successful.  result in def_int */
 
@@ -4574,8 +4666,8 @@ static int xrm_initted = 0;
 
 /***********************************/
 int rd_str_cl (name_str, class_str, reinit)
-     char *name_str;
-     char *class_str;
+     const char *name_str;
+     const char *class_str;
      int  reinit;
 {
   /* note: *all* X resource reading goes through this routine... */
@@ -4659,13 +4751,14 @@ int rd_str_cl (name_str, class_str, reinit)
 	if (DEBUG) fprintf(stderr,"rd_str_cl: Using RESOURCE_MANAGER prop.\n");
       }
       else {    /* no RESOURCE_MANAGER prop.  read from 'likely' file */
-	char foo[256], *homedir, *xenviron;
+	char foo[256], *xenviron;
+	const char *homedir;
 	XrmDatabase res1;
 
 #ifdef VMS
 	strcpy(foo, "SYS$LOGIN:DECW$XDEFAULTS.DAT");
 #else
-	homedir = (char *) getenv("HOME");
+	homedir = (const char *) getenv("HOME");
 	if (!homedir) homedir = ".";
 	sprintf(foo,"%s/.Xdefaults", homedir);
 #endif
@@ -4716,8 +4809,7 @@ int rd_str_cl (name_str, class_str, reinit)
   (void) XrmGetResource(def_resource, q_name, q_class, &type, &result);
 
   def_str = result.addr;
-  if (def_str) return (1);
-  else return (0);
+  if (def_str) return 1;
+  else return 0;
 }
-
 

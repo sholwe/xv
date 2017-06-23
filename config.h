@@ -20,11 +20,7 @@
 #  ifdef VMS
 #    define GUNZIP "UNCOMPRESS"
 #  else
-#    if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__linux__)
-#      define GUNZIP "/usr/bin/gzip -dq"
-#    else
-#      define GUNZIP "/usr/local/bin/gzip -dq" /* is full path truly needed? */
-#    endif
+#    define GUNZIP "gzip -dq"
 #  endif
 #endif
 
@@ -67,7 +63,7 @@
      machine has or not.
      */
 #  undef  UNCOMPRESS
-#  define UNCOMPRESS "/usr/bin/uncompress"
+#  define UNCOMPRESS "uncompress"
 #endif
 
 #if defined(sgi)
@@ -117,7 +113,7 @@
  */
 
 /* #define GS_PATH "/usr/local/bin/gs" */
-#define GS_PATH "/usr/bin/gs"
+#define GS_PATH "gs"
 /* #define GS_LIB  "."                 */
 /* #define GS_DEV  "ppmraw"            */
 
@@ -127,9 +123,9 @@
  *
  * XV now has a nifty, new logo image.  The downside is that it increases
  * the size of the 'xv' executable by 250K or so, and it's possible that
- * your compiler may choke while compiling 'xvdflt.c'.  If you're compiler
+ * your compiler may choke while compiling 'xvdflt.c'.  If your compiler
  * can't handle it, or you're running Linux on a system with minimal memory,
- * change 'undef' to 'define' in the following line
+ * change 'undef' to 'define' in the following line:
  */
 
 #undef USEOLDPIC
@@ -147,6 +143,23 @@
  */
 
 #define BACKING_STORE
+
+
+/***************************************************************************
+ * TIFF YCbCr-to-RGB conversion:
+ *
+ * Newer versions of libtiff can be compiled with libjpeg for JPEG-in-TIFF
+ * support, and according to Scott Marovich, "the IJG JPEG Library...sometimes
+ * seems to produce slightly more accurate results" (one known example:  the
+ * 'quad-jpeg.tif' test image).  In addition, libtiff can be compiled with
+ * "old JPEG" support, although its configure script will not enable that by
+ * default.  Change 'define' and 'undef' in the following lines as you wish,
+ * but note that defining LIBTIFF_HAS_OLDJPEG_SUPPORT when such is _not_ the
+ * case will result in crashes when encountering old-JPEG TIFFs:
+ */
+
+#define USE_LIBJPEG_FOR_TIFF_YCbCr_RGB_CONVERSION
+#undef LIBTIFF_HAS_OLDJPEG_SUPPORT
 
 
 /***************************************************************************

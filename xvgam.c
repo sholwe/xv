@@ -99,7 +99,7 @@ typedef struct huedial {
 		 int    stval;    /* start of range (ONLY val ifnot range) */
 		 int    enval;    /* end of range */
 		 int    ccwise;   /* 1 if range goes ccwise, 0 if cwise */
-		 char  *str;      /* title string */
+		 const char *str; /* title string */
 		 u_long fg,bg;    /* colors */
 		 int    satval;   /* saturation value on non-range dial */
 		 BUTT   hdbutt[N_HDBUTT];
@@ -122,7 +122,7 @@ static int    hremap[360];
 static int    defAutoApply;
 static int    hsvnonlinear = 0;
 
-static void printUTime       PARM((char *));
+static void printUTime       PARM((const char *));
 
 static void computeHSVlinear PARM((void));
 static void changedGam       PARM((void));
@@ -154,7 +154,7 @@ static void dragHueDial      PARM((void));
 static void dragEditColor    PARM((void));
 
 static void HDCreate         PARM((HDIAL *, Window, int, int, int, int,
-				   int, int, char *, u_long, u_long));
+				   int, int, const char *, u_long, u_long));
 
 static void HDRedraw         PARM((HDIAL *, int));
 static int  HDClick          PARM((HDIAL *, int, int));
@@ -191,10 +191,11 @@ static void build_hremap     PARM((void));
 
 /***************************/
 static void printUTime(str)
-     char *str;
+     const char *str;
 {
 #ifdef TIMING_TEST
-  int i;  struct rusage ru;
+  int i;
+  struct rusage ru;
 
   i = getrusage(RUSAGE_SELF, &ru);
   fprintf(stderr,"%s: utime = %ld.%ld seconds\n",
@@ -206,9 +207,9 @@ static void printUTime(str)
 
 /***************************************************/
 void CreateGam(geom, gam, rgam, ggam, bgam, defpreset)
-     char   *geom;
-     double  gam, rgam, ggam, bgam;
-     int     defpreset;
+     const char *geom;
+     double      gam, rgam, ggam, bgam;
+     int         defpreset;
 {
   XSetWindowAttributes xswa;
 
@@ -2434,11 +2435,11 @@ static Pixmap hdbpix2[N_HDBUTT2];
 
 /**************************************************/
 static void HDCreate(hd, win, x, y, r, st, en, ccwise, str, fg, bg)
-HDIAL *hd;
-Window win;
-int x,y,r,st,en,ccwise;
-char *str;
-u_long fg,bg;
+     HDIAL      *hd;
+     Window      win;
+     int         x, y, r, st, en, ccwise;
+     const char *str;
+     u_long      fg, bg;
 {
   int i;
 
@@ -2519,7 +2520,7 @@ int flags;
   }
 
   if (flags & HD_FRAME) {
-    static char *colstr = "RYGCBM";
+    static const char *colstr = "RYGCBM";
     char tstr[2];
 
     XSetForeground(theDisp, theGC, hd->fg);

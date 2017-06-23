@@ -3,7 +3,7 @@
 # your C compiler (and options) of choice
 CC = cc
 #CC = gcc -ansi
-# note that -ansi kills __USE_MISC (gcc 2.95.3), which (at least in Linux)
+# note that -ansi kills __USE_MISC (gcc 2.95.3), which, at least on Linux,
 # determines whether stdlib.h includes prototypes for mktemp(), random(), etc.
 # (i.e., if you use it, you will get unnecessary compiler warnings)
 #CC = gcc
@@ -19,9 +19,16 @@ CC = cc
 
 
 CCOPTS = -O
+#
 # these are the usual optimization and warning options for gcc; all such
 # warnings but one (mktemp() use) have been eliminated (at least on Linux):
 #CCOPTS = -O3 -Wall
+#
+# slightly more warnings... older code often made non-const pointers to
+# static strings (nothing should blow up unless something tries to write
+# to them):
+#CCOPTS = -O3 -Wall -Wpointer-arith -Wcast-align -Wwrite-strings -Wnested-externs
+#
 # for the next step up in gcc noise, try adding -W (but note that it adds a
 # huge number of unused-parameter and signed/unsigned comparison warnings):
 #CCOPTS = -O3 -Wall -W
@@ -36,18 +43,26 @@ CCOPTS = -O
 ### '-I' options on the CCOPTS line to tell the compiler where said files are.
 
 
+# older Unixen don't support the -p option, but its lack may mean installation
+# will fail (if more than one directory level is missing)
+MKDIR = mkdir -p
+
+
 # BeOS _may_ need to use a different version (below), but probably not
 CLEANDIR = cleandir
 
 
 ### Installation locations
+### NOTE: Users of old K&R compilers (i.e., any version not supporting C89
+### string concatenation, such as "fub" "ar" => "fubar") should update
+### xvtext.c:1831 (or thereabouts) if either PREFIX or DOCDIR changes:
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
-MANDIR = $(PREFIX)/man/man1
+MANDIR = $(PREFIX)/share/man/man1
 MANSUF = 1
-DOCDIR = $(PREFIX)/doc/xv-3.10a
+DOCDIR = $(PREFIX)/share/doc/xv
 LIBDIR = $(PREFIX)/lib/xv
-SYSCONFDIR = $(PREFIX)/etc
+SYSCONFDIR = /etc
 DESTDIR =
 
 
@@ -59,14 +74,53 @@ buildit: all
 ##############################################################################
 
 ###
+### if, for whatever reason, you're unable to get the TIFF library to compile
+### on your machine, *COMMENT OUT* the following lines
+###
+### GRR 20050319:  USE_TILED_TIFF_BOTLEFT_FIX enables an experimental fix for
+###   tiled TIFFs with ORIENTATION_BOTLEFT.  It may break other tiled TIFFs,
+###   or it may be required for certain other TIFF types (e.g., strips with
+###   ORIENTATION_BOTLEFT).  I don't have a sufficient variety of TIFF test
+###   images at hand.
+###
+#TIFF    = -DDOTIFF
+TIFF    = -DDOTIFF -DUSE_TILED_TIFF_BOTLEFT_FIX
+###
+#TIFFDIR = tiff
+TIFFDIR = /usr
+#TIFFDIR = /usr/local
+#TIFFDIR = ../../libtiff
+###
+TIFFINC = -I$(TIFFDIR)/include
+#TIFFINC = -I$(TIFFDIR)
+###
+### libtiff 3.5 and up may be compiled with zlib and libjpeg, but the
+### dependency is properly handled in LIBS line ~247 lines below
+###
+TIFFLIB = -L$(TIFFDIR)/lib -ltiff
+#TIFFLIB = $(TIFFDIR)/lib/libtiff.a
+#TIFFLIB = -L$(TIFFDIR) -ltiff
+#TIFFLIB = $(TIFFDIR)/libtiff.a
+###
+### this is intended to build the ancient version (3.3.016 beta) that's
+### included in the "tiff" subdir of XV, not an arbitrary copy of libtiff:
+###
+#$(TIFFLIB):
+#	( cd $(TIFFDIR) ; make CC='$(CC)' COPTS='$(CCOPTS) $(MCHN)' )
+
+
+###
 ### if, for whatever reason, you're unable to get the JPEG library to compile
 ### on your machine, *COMMENT OUT* the following lines
+###
+### NOTE: /usr/sfw can be used on Solaris with "Sun freeware" installed
 ###
 JPEG    = -DDOJPEG
 #JPEGDIR = jpeg
 JPEGDIR = /usr
 #JPEGDIR = /usr/local
 #JPEGDIR = ../../libjpeg
+#JPEGDIR = /usr/sfw
 ###
 JPEGINC = -I$(JPEGDIR)/include
 #JPEGINC = -I$(JPEGDIR)
@@ -119,37 +173,19 @@ ZLIBLIB = -L$(ZLIBDIR)/lib -lz
 
 
 ###
-### if, for whatever reason, you're unable to get the TIFF library to compile
-### on your machine, *COMMENT OUT* the following lines
+### if, for whatever reason, you're unable to get the JasPer JPEG-2000 library
+### to compile on your machine, *COMMENT OUT* the following lines
 ###
-### GRR 20050319:  USE_TILED_TIFF_BOTLEFT_FIX enables an experimental fix for
-###   tiled TIFFs with ORIENTATION_BOTLEFT.  It may break other tiled TIFFs,
-###   or it may be required for certain other TIFF types (e.g., strips with
-###   ORIENTATION_BOTLEFT).  I don't have a sufficient variety of TIFF test
-###   images at hand.
+JP2K    = -DDOJP2K
 ###
-#TIFF    = -DDOTIFF
-TIFF    = -DDOTIFF -DUSE_TILED_TIFF_BOTLEFT_FIX
-#TIFFDIR = tiff
-TIFFDIR = /usr
-#TIFFDIR = /usr/local
-#TIFFDIR = ../../libtiff
+#JP2KDIR = ../../jasper
+JP2KDIR = /usr/local/lib
 ###
-TIFFINC = -I$(TIFFDIR)/include
-#TIFFINC = -I$(TIFFDIR)
+#JP2KINC = -I$(JP2KDIR)
+JP2KINC = -I/usr/local/include
 ###
-### libtiff 3.5 and up may be compiled with zlib and libjpeg, but dependency
-### is properly handled in LIBS line ~143 lines below
-###
-TIFFLIB = -L$(TIFFDIR)/lib -ltiff
-#TIFFLIB = -L$(TIFFDIR) -ltiff
-#TIFFLIB = $(TIFFDIR)/libtiff.a
-###
-### this is intended to build the ancient version (3.3.016 beta) that's included
-### in the "tiff" subdir of XV, not an arbitrary copy of libtiff:
-###
-#$(TIFFLIB):
-#	( cd $(TIFFDIR) ; make CC='$(CC)' COPTS='$(CCOPTS) $(MCHN)' )
+#JP2KLIB = -L$(JP2KDIR) -ljasper
+JP2KLIB = $(JP2KDIR)/libjasper.a
 
 
 ###
@@ -199,8 +235,9 @@ PDS = -DDOPDS
 # using XV's AUTO_EXPAND option.
 
 
-### for LINUX, uncomment the following line
+### for Linux, uncomment one of the following lines:
 #MCHN = -DLINUX -L/usr/X11R6/lib
+#MCHN = -DLINUX -L/usr/X11R6/lib64
 
 
 # For SCO 1.1 (UNIX 3.2v2) machines, uncomment the following:
@@ -275,6 +312,12 @@ PDS = -DDOPDS
 #VPRINTF = -DNEED_VPRINTF -DLONGINT -DNOSTDHDRS
 
 
+# if your machine puts the prototype for 'malloc()' in malloc.h rather than
+# stdlib.h, uncomment the following line:
+#
+#MALLOC = -DNEED_MALLOC_H
+
+
 # if your X Window System compiled with -DX_LOCALE, 
 # uncomment the following line:
 # TVL10N = -DX_LOCALE
@@ -293,13 +336,14 @@ MGCSFX = -DMGCSFXDIR=\"$(MGCSFXDIR)\"
 
 
 CFLAGS = $(CCOPTS) $(PNG) $(PNGINC) $(ZLIBINC) $(JPEG) $(JPEGINC) \
-	$(TIFF) $(TIFFINC) $(PDS) $(NODIRENT) $(VPRINTF) $(TIMERS) \
-	$(UNIX) $(BSDTYPES) $(RAND) $(DXWM) $(MCHN) $(TVL10N) $(MGCSFX) \
+	$(TIFF) $(TIFFINC) $(PDS) $(JP2K) $(JP2KINC) $(TVL10N) $(MGCSFX) \
+	$(UNIX) $(BSDTYPES) $(RAND) $(MALLOC) $(DXWM) $(MCHN) $(NODIRENT) \
+	$(VPRINTF) $(TIMERS) -DDOCDIR=\"$(DOCDIR)\" \
 	-DSYSCONFDIR=\"$(SYSCONFDIR)\" -DXVEXECPATH=\"$(LIBDIR)\"
 
 ### remove -lm for BeOS:
-LIBS = $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIBLIB) -L/usr/X11R6/lib -lX11 -lm
-#LIBS = $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIBLIB) -lX11
+LIBS = $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIBLIB) $(JP2KLIB) -L/usr/X11R6/lib -lX11 -lm
+#LIBS = $(TIFFLIB) $(JPEGLIB) $(PNGLIB) $(ZLIBLIB) $(JP2KLIB) -lX11
 
 OBJS = 	xv.o xvevent.o xvroot.o xvmisc.o xvimage.o xvcolor.o xvsmooth.o \
 	xv24to8.o xvgif.o xvpm.o xvinfo.o xvctrl.o xvscrl.o xvalg.o \
@@ -309,7 +353,7 @@ OBJS = 	xv.o xvevent.o xvroot.o xvmisc.o xvimage.o xvcolor.o xvsmooth.o \
 	xvbrowse.o xvtext.o xvpcx.o xviff.o xvtarga.o xvxpm.o xvcut.o \
 	xvxwd.o xvfits.o xvpng.o xvzx.o xvwbmp.o xvpcd.o xvhips.o \
 	xvmag.o xvpic.o xvmaki.o xvpi.o xvpic2.o xvvd.o xvmgcsfx.o \
-	xvml.o
+	xvml.o xvjp2k.o
 
 MISC = README INSTALL CHANGELOG IDEAS
 
@@ -352,15 +396,36 @@ clean:  xvclean
 	./$(CLEANDIR) tiff
 
 
+# could also do some shell trickery here to attempt mkdir only if dir is
+# missing (e.g., "test -d <dir> || $(MKDIR) <dir>")
 install: all
-	cp xv bggen vdcomp xcmap xvpictoppm $(DESTDIR)$(BINDIR)
+	$(MKDIR) $(DESTDIR)$(BINDIR)
+	cp xv bggen vdcomp xcmap xvpictoppm $(DESTDIR)$(BINDIR)/.
+	chmod 755 $(DESTDIR)$(BINDIR)/xv $(DESTDIR)$(BINDIR)/bggen \
+	  $(DESTDIR)$(BINDIR)/vdcomp $(DESTDIR)$(BINDIR)/xcmap \
+	  $(DESTDIR)$(BINDIR)/xvpictoppm
+#
+	$(MKDIR) $(DESTDIR)$(MANDIR)
 	cp docs/xv.man     $(DESTDIR)$(MANDIR)/xv.$(MANSUF)
 	cp docs/bggen.man  $(DESTDIR)$(MANDIR)/bggen.$(MANSUF)
 	cp docs/xcmap.man  $(DESTDIR)$(MANDIR)/xcmap.$(MANSUF)
 	cp docs/xvp2p.man  $(DESTDIR)$(MANDIR)/xvpictoppm.$(MANSUF)
 	cp docs/vdcomp.man $(DESTDIR)$(MANDIR)/vdcomp.$(MANSUF)
-	cp docs/xvdocs.ps* $(DESTDIR)$(LIBDIR) # or $(DESTDIR)$(DOCDIR)
+	chmod 644 $(DESTDIR)$(MANDIR)/xv.$(MANSUF) \
+	  $(DESTDIR)$(MANDIR)/bggen.$(MANSUF) \
+	  $(DESTDIR)$(MANDIR)/xcmap.$(MANSUF) \
+	  $(DESTDIR)$(MANDIR)/xvpictoppm.$(MANSUF) \
+	  $(DESTDIR)$(MANDIR)/vdcomp.$(MANSUF)
+#
+	$(MKDIR) $(DESTDIR)$(DOCDIR)		# or $(DESTDIR)$(LIBDIR)
+	cp README.jumbo docs/xvdocs.pdf docs/xvdocs.ps $(DESTDIR)$(DOCDIR)/.
+	chmod 644 $(DESTDIR)$(DOCDIR)/README.jumbo \
+	  $(DESTDIR)$(DOCDIR)/xvdocs.pdf $(DESTDIR)$(DOCDIR)/xvdocs.ps
+#
+	#$(MKDIR) $(DESTDIR)$(SYSCONFDIR)
 	#cp xv_mgcsfx.sample $(DESTDIR)$(SYSCONFDIR)/xv_mgcsfx
+	#chmod 644 $(DESTDIR)$(SYSCONFDIR)/xv_mgcsfx
+
 
 tar:
 #	tar only local jpeg and tiff dirs, not user's or system's copies:
@@ -380,12 +445,14 @@ xv.o:		bits/cboard50 bits/gray25
 
 xvbrowse.o:	bits/br_file bits/br_dir bits/br_exe bits/br_chr bits/br_blk
 xvbrowse.o:	bits/br_sock bits/br_fifo bits/br_error # bits/br_unknown
-xvbrowse.o:	bits/br_cmpres bits/br_gif bits/br_pm bits/br_pbm
+xvbrowse.o:	bits/br_cmpres bits/br_bzip2 bits/br_gif bits/br_pm bits/br_pbm
 xvbrowse.o:	bits/br_sunras bits/br_bmp bits/br_utah bits/br_iris
-xvbrowse.o:	bits/br_pcx bits/br_jfif bits/br_tiff bits/br_pds
-xvbrowse.o:	bits/br_ps bits/br_iff bits/br_targa bits/br_xpm
+xvbrowse.o:	bits/br_pcx bits/br_jfif bits/br_tiff bits/br_pds bits/br_pcd
+xvbrowse.o:	bits/br_ps bits/br_iff bits/br_targa bits/br_xpm bits/br_xwd
+xvbrowse.o:	bits/br_fits bits/br_png bits/br_zx bits/br_mag bits/br_maki
+xvbrowse.o:	bits/br_pic bits/br_pi bits/br_pic2 bits/br_mgcsfx
+xvbrowse.o:	bits/br_jp2 bits/br_jpc
 xvbrowse.o:	bits/br_trash bits/fcurs bits/fccurs bits/fdcurs bits/fcursm
-xvbrowse.o:	bits/br_xwd bits/br_png bits/br_zx bits/br_pcd bits/br_bzip2
 
 xvbutt.o:	bits/cboard50 bits/rb_frame bits/rb_frame1 bits/rb_top
 xvbutt.o:	bits/rb_bot bits/rb_dtop bits/rb_dbot bits/rb_body

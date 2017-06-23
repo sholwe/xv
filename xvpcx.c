@@ -36,10 +36,10 @@
 #define PCX_MAPSTART 0x0c	/* Start of appended colormap	*/
 
 
-static int  pcxLoadImage8  PARM((char *, FILE *, PICINFO *, byte *));
-static int  pcxLoadImage24 PARM((char *, FILE *, PICINFO *, byte *));
+static int  pcxLoadImage8  PARM((const char *, FILE *, PICINFO *, byte *));
+static int  pcxLoadImage24 PARM((const char *, FILE *, PICINFO *, byte *));
 static void pcxLoadRaster  PARM((FILE *, byte *, int, byte *, int, int));
-static int  pcxError       PARM((char *, char *));
+static int  pcxError       PARM((const char *, const char *));
 
 
 
@@ -51,9 +51,9 @@ int LoadPCX(fname, pinfo)
 {
   FILE  *fp;
   long   filesize;
-  char  *bname;
   byte   hdr[128];
   int    i, colors, gray, fullcolor;
+  const char  *bname;
 
   pinfo->type = PIC8;
   pinfo->pic     = (byte *) NULL;
@@ -212,7 +212,7 @@ int LoadPCX(fname, pinfo)
 
 /*****************************/
 static int pcxLoadImage8(fname, fp, pinfo, hdr)
-     char    *fname;
+     const char *fname;
      FILE    *fp;
      PICINFO *pinfo;
      byte    *hdr;
@@ -249,7 +249,7 @@ static int pcxLoadImage8(fname, fp, pinfo, hdr)
 
 /*****************************/
 static int pcxLoadImage24(fname, fp, pinfo, hdr)
-     char *fname;
+     const char *fname;
      FILE *fp;
      PICINFO *pinfo;
      byte *hdr;
@@ -393,7 +393,7 @@ static void pcxLoadRaster(fp, image, depth, hdr, w,h)
 
 /*******************************************/
 static int pcxError(fname,st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;

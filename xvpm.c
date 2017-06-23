@@ -42,9 +42,9 @@ typedef struct {
 /***** end PM.H *****/
 
 
-pmpic  thePic;
+static pmpic thePic;
 
-static int  pmError  PARM((char *, char *));
+static int  pmError  PARM((const char *, const char *));
 static int  flip4    PARM((int));
 static int  getint32 PARM((FILE *));
 static void putint32 PARM((int, FILE *));
@@ -61,7 +61,7 @@ int LoadPM(fname, pinfo)
   FILE  *fp;
   byte  *pic8;
   int    isize,i,flipit,w,h,npixels,nRGBbytes;
-  char  *bname;
+  const char  *bname;
 
   bname = BaseName(fname);
   thePic.pm_image = (char *) NULL;
@@ -242,7 +242,7 @@ int LoadPM(fname, pinfo)
 	  (thePic.pm_form==PM_I || thePic.pm_np>1)
 	        ? "24-bit color" : "8-bit greyscale",
 	  thePic.pm_np, (thePic.pm_form==PM_I) ? "PM_I" : "PM_C",
-	  isize + PM_IOHDR_SIZE + thePic.pm_cmtsize);
+	  isize + (int)PM_IOHDR_SIZE + thePic.pm_cmtsize);
 
   sprintf(pinfo->shrtInfo, "%dx%d PM.", w,h);
   pinfo->comment = thePic.pm_cmt;
@@ -359,7 +359,7 @@ int WritePM(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
 
 /*****************************/
 static int pmError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   if (thePic.pm_image != NULL) free(thePic.pm_image);

@@ -50,54 +50,59 @@
 #define COLWIDE  150               /* width of colMB */
 
 /* NOTE: make sure these match up with F_* definitions in xv.h */
-static char *saveColors[] = { "Full Color",
-			      "Greyscale",
-			      "B/W Dithered",
-			      "Reduced Color" };
+static const char *saveColors[] = { "Full Color",
+				    "Greyscale",
+				    "B/W Dithered",
+				    "Reduced Color" };
 
-static char *saveFormats[] = { "GIF",
-#ifdef HAVE_JPEG
-			       "JPEG",
-#endif
-#ifdef HAVE_TIFF
-			       "TIFF",
-#endif
+static const char *saveFormats[] = {
 #ifdef HAVE_PNG
-			       "PNG",
+					"PNG",
 #endif
-			       "PostScript",
-			       "PBM/PGM/PPM (raw)",
-			       "PBM/PGM/PPM (ascii)",
-			       "X11 Bitmap",
-			       "XPM",
-			       "BMP",
-			       "Sun Rasterfile",
-			       "IRIS RGB",
-			       "Targa (24-bit)",
-			       "FITS",
-			       "PM",
-			       "Spectrum SCREEN$",	/* [JCE] */
-			       "WBMP",
+#ifdef HAVE_JPEG
+					"JPEG",
+#endif
+#ifdef HAVE_JP2K
+					"JPEG 2000",
+					"JP2",
+#endif 
+					"GIF",
+#ifdef HAVE_TIFF
+					"TIFF",
+#endif
+					"PostScript",
+					"PBM/PGM/PPM (raw)",
+					"PBM/PGM/PPM (ascii)",
+					"X11 Bitmap",
+					"XPM",
+					"BMP",
+					"Sun Rasterfile",
+					"IRIS RGB",
+					"Targa (24-bit)",
+					"FITS",
+					"PM",
+					"Spectrum SCREEN$",	/* [JCE] */
+					"WBMP",
 #ifdef HAVE_MAG
-			       "MAG",
+					"MAG",
 #endif
 #ifdef HAVE_PIC
-			       "PIC",
+					"PIC",
 #endif
 #ifdef HAVE_MAKI
-			       "MAKI (640x400 only)",
+					"MAKI (640x400 only)",
 #endif
 #ifdef HAVE_PI
-			       "PI",
+					"PI",
 #endif
 #ifdef HAVE_PIC2
-			       "PIC2",
+					"PIC2",
 #endif
 #ifdef HAVE_MGCSFX
-			       "MgcSfx",
+					"MgcSfx",
 #endif
-			       MBSEP,
-			       "Filename List"};
+					MBSEP,
+					"Filename List" };
 
 #ifdef HAVE_PIC2
 extern int PIC2SaveParams    PARM((char *, int));
@@ -113,7 +118,7 @@ static void loadCWD          PARM((void));
 static int  cd_able          PARM((char *));
 #endif
 static void scrollToFileName PARM((void));
-static void setFName         PARM((char *));
+static void setFName         PARM((const char *));
 static void showFName        PARM((void));
 static void changeSuffix     PARM((void));
 static int  autoComplete     PARM((void));
@@ -123,22 +128,23 @@ static byte *handleBWandReduced   PARM((byte *, int,int,int, int, int *,
 static byte *handleNormSel        PARM((int *, int *, int *, int *));
 
 
-static char  *fnames[MAXNAMES];
-static int    numfnames = 0, ndirs = 0;
-static char   path[MAXPATHLEN+1];       /* '/' terminated */
-static char   loadpath[MAXPATHLEN+1];   /* '/' terminated */
-static char   savepath[MAXPATHLEN+1];   /* '/' terminated */
-static char  *dirs[MAXDEEP];            /* list of directory names */
-static char  *dirMBlist[MAXDEEP];       /* list of dir names in right order */
-static char  *lastdir;                  /* name of the directory we're in */
-static char   filename[MAXFNLEN+100];   /* filename being entered */
-static char   deffname[MAXFNLEN+100];   /* default filename */
+static char       *fnames[MAXNAMES];
+static int         numfnames = 0, ndirs = 0;
+static char        path[MAXPATHLEN+1];       /* '/' terminated */
+static char        loadpath[MAXPATHLEN+1];   /* '/' terminated */
+static char        savepath[MAXPATHLEN+1];   /* '/' terminated */
+static char       *dirs[MAXDEEP];            /* list of directory names */
+static const char *dirMBlist[MAXDEEP];       /* list of dir names in right order */
+static char       *lastdir;                  /* name of the directory we're in */
+static char        filename[MAXFNLEN+100];   /* filename being entered */
+static char        deffname[MAXFNLEN+100];   /* default filename */
 
-static int    savemode;                 /* if 0 'load box', if 1 'save box' */
-static int    curPos, stPos, enPos;     /* filename textedit stuff */
-static MBUTT  dirMB;                    /* popup path menu */
-static MBUTT  fmtMB;                    /* 'format' menu button (Save only) */
-static MBUTT  colMB;                    /* 'colors' menu button (Save only) */
+static int   savemode;                 /* if 0 'load box', if 1 'save box' */
+static int   curPos;                   /* insertion point in textedit filename */
+static int   stPos, enPos;             /* start and end of visible textedit filename */
+static MBUTT dirMB;                    /* popup path menu */
+static MBUTT fmtMB;                    /* 'format' menu button (Save only) */
+static MBUTT colMB;                    /* 'colors' menu button (Save only) */
 
 static Pixmap d_loadPix, d_savePix;
 
@@ -345,7 +351,8 @@ void RedrawDirW(x,y,w,h)
      int x,y,w,h;
 {
   int        i, ypos, txtw;
-  char       foo[30], *str;
+  char       foo[30];
+  const char *str;
 
   if (dList.nstr==1) strcpy(foo,"1 file");
                 else sprintf(foo,"%d files",dList.nstr);
@@ -526,10 +533,35 @@ int x,y;
   }
 
 
-
   if (MBClick(&dirMB, x, y)) {
     i = MBTrack(&dirMB);
     if (i >= 0) changedDirMB(i);
+    return -1;
+  }
+
+  /* handle clicks inside the filename box */
+  if (x > 80 &&
+      y > dList.y + (int) dList.h + 30 &&
+      x < 80 + DNAMWIDE+6 &&
+      y < dList.y + (int) dList.h + 30 + LINEHIGH+5) {
+    int tx;
+    int dx;
+    int pos;
+
+    /* make coordinates relative to dnamW */
+    tx = x - (80 + 1 + 3); /* left side plus the border plus the space for the "more stuff" sign */
+
+    for (pos=stPos; pos+1 < enPos; pos++) {
+      if (XTextWidth(mfinfo, &filename[stPos], 1+pos-stPos) > tx)
+        break;
+    }
+    /* if we are more than halfway past this char, put the insertion point after it */
+    dx = tx - XTextWidth(mfinfo, &filename[stPos], pos-stPos);
+    if (dx > XTextWidth(mfinfo, &filename[pos], 1)/2)
+      pos++;
+
+    curPos = pos;
+    showFName();
   }
 
   return -1;
@@ -657,7 +689,7 @@ void LoadCurrentDirectory()
   numfnames = 0;
 
   /* get rid of old dirMBlist */
-  for (i=0; i<ndirs; i++) free(dirMBlist[i]);
+  for (i=0; i<ndirs; i++) free((char *) dirMBlist[i]);
 
 #ifndef VMS
   if (strlen(path) == 0) xv_getwd(path, sizeof(path));  /* no dir, use cwd */
@@ -710,12 +742,15 @@ void LoadCurrentDirectory()
 
   /* build dirMBlist */
   for (i=ndirs-1,j=0; i>=0; i--,j++) {
-    size_t stlen = (i<(ndirs-1)) ? dirs[i+1] - dirs[i] : strlen(dirs[i]);
-    dirMBlist[j] = (char *) malloc(stlen+1);
-    if (!dirMBlist[j]) FatalError("unable to malloc dirMBlist[]");
+    size_t  stlen = (i<(ndirs-1)) ? dirs[i+1] - dirs[i] : strlen(dirs[i]);
+    char   *copy;
 
-    strncpy(dirMBlist[j], dirs[i], stlen);
-    dirMBlist[j][stlen] = '\0';
+    copy = malloc(stlen+1);
+    if (!copy) FatalError("unable to malloc dirMBlist[]");
+
+    strncpy(copy, dirs[i], stlen);
+    copy[stlen] = '\0';
+    dirMBlist[j] = copy;
   }
 
 
@@ -751,7 +786,7 @@ void LoadCurrentDirectory()
 
       if (i == MAXNAMES) {
 	fprintf(stderr,
-		"%s: too many directory entries.  Only using first %d.\n",
+		"%s: too many directory entries.  Using only first %d.\n",
 		cmd, MAXNAMES);
 	break;
       }
@@ -875,13 +910,17 @@ int DirKey(c)
   if (c>=' ' && c<'\177') {             /* printable characters */
     /* note: only allow 'piped commands' in savemode... */
 
+#undef PREVENT_SPACES /* Spaces are fine in filenames. */
+#ifdef PREVENT_SPACES
     /* only allow spaces in 'piped commands', not filenames */
     if (c==' ' && (!ISPIPE(filename[0]) || curPos==0)) return (-1);
+#endif
 
     /* only allow vertbars in 'piped commands', not filenames */
     if (c=='|' && curPos!=0 && !ISPIPE(filename[0])) return(-1);
 
     if (len >= MAXFNLEN-1) return(-1);  /* max length of string */
+
     xvbcopy(&filename[curPos], &filename[curPos+1], (size_t) (len-curPos+1));
     filename[curPos]=c;  curPos++;
 
@@ -1074,6 +1113,7 @@ void RedrawDNamW()
 
   XDrawString(theDisp, dnamW, theGC,3,ASCENT+3,filename+stPos, enPos-stPos);
 
+  /* draw insertion point */
   cpos = XTextWidth(mfinfo, &filename[stPos], curPos-stPos);
   XDrawLine(theDisp, dnamW, theGC, 3+cpos, 2, 3+cpos, 2+CHIGH+1);
   XDrawLine(theDisp, dnamW, theGC, 3+cpos, 2+CHIGH+1, 5+cpos, 2+CHIGH+3);
@@ -1161,7 +1201,16 @@ int DoSave()
 #ifdef HAVE_JPEG
   else if (fmt == F_JPEG) {   /* JPEG */
     JPEGSaveParams(fullname, col);
-    JPEGDialog(1);                   /* open JPEGDialog box */
+    JPEGDialog(1);                 /* open JPEGDialog box */
+    dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
+    return 0;                      /* always 'succeeds' */
+  }
+#endif
+
+#ifdef HAVE_JP2K
+  else if (fmt == F_JPC || fmt == F_JP2) {   /* JPEG 2000 */
+    JP2KSaveParams(fmt, fullname, col);
+    JP2KDialog(1);                 /* open JP2KDialog box */
     dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
     return 0;                      /* always 'succeeds' */
   }
@@ -1170,7 +1219,7 @@ int DoSave()
 #ifdef HAVE_TIFF
   else if (fmt == F_TIFF) {   /* TIFF */
     TIFFSaveParams(fullname, col);
-    TIFFDialog(1);                   /* open TIFF Dialog box */
+    TIFFDialog(1);                 /* open TIFF Dialog box */
     dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
     return 0;                      /* always 'succeeds' */
   }
@@ -1179,7 +1228,7 @@ int DoSave()
 #ifdef HAVE_PNG
   else if (fmt == F_PNG) {   /* PNG */
     PNGSaveParams(fullname, col);
-    PNGDialog(1);                   /* open PNG Dialog box */
+    PNGDialog(1);                  /* open PNG Dialog box */
     dbut[S_BOK].lit = 0;  BTRedraw(&dbut[S_BOK]);
     return 0;                      /* always 'succeeds' */
   }
@@ -1325,7 +1374,7 @@ int DoSave()
 
 /***************************************************/
 void SetDirFName(st)
-     char *st;
+     const char *st;
 {
   strncpy(deffname, st, (size_t) MAXFNLEN-1);
   deffname[MAXFNLEN-1] = '\0';
@@ -1335,7 +1384,7 @@ void SetDirFName(st)
 
 /***************************************************/
 static void setFName(st)
-     char *st;
+     const char *st;
 {
   strncpy(filename, st, (size_t) MAXFNLEN-1);
   filename[MAXFNLEN-1] = '\0';  /* make sure it's terminated */
@@ -1517,6 +1566,10 @@ static void changeSuffix()
       (strcmp(lowsuf,"jpeg")==0) ||
       (strcmp(lowsuf,"jfif")==0) ||
 #endif
+#ifdef HAVE_JP2K
+      (strcmp(lowsuf,"jpc" )==0) ||
+      (strcmp(lowsuf,"jp2" )==0) ||
+#endif
 #ifdef HAVE_TIFF
       (strcmp(lowsuf,"tif" )==0) ||
       (strcmp(lowsuf,"tiff")==0) ||
@@ -1564,6 +1617,11 @@ static void changeSuffix()
 
 #ifdef HAVE_JPEG
     case F_JPEG:     strcpy(lowsuf,"jpg");  break;
+#endif
+
+#ifdef HAVE_JP2K
+    case F_JPC:      strcpy(lowsuf,"jpc");  break;
+    case F_JP2:      strcpy(lowsuf,"jp2");  break;
 #endif
 
 #ifdef HAVE_TIFF
@@ -1725,8 +1783,8 @@ int Globify(fname)
   *up='\0';
 
   if (*uname=='\0') { /* no name.  substitute ~ with $HOME */
-    char *homedir;
-    homedir = (char *) getenv("HOME");
+    const char *homedir;
+    homedir = (const char *) getenv("HOME");
     if (homedir == NULL) homedir = ".";
     strcpy(tmp,homedir);
     strcat(tmp,sp);
@@ -1750,7 +1808,7 @@ int Globify(fname)
 
 /***************************************/
 FILE *OpenOutFile(filename)
-     char *filename;
+     const char *filename;
 {
   /* opens file for output.  does various error handling bits.  Returns
      an open file pointer if success, NULL if failure */
@@ -1790,11 +1848,11 @@ FILE *OpenOutFile(filename)
 #endif
     /* see if file exists (i.e., we're overwriting) */
     if (stat(outFName, &st)==0) {   /* stat succeeded, file must exist */
-      static char *foo[] = { "\nOk", "\033Cancel" };
-      char str[512];
+      static const char *labels[] = { "\nOk", "\033Cancel" };
+      char               str[512];
 
       sprintf(str,"Overwrite existing file '%s'?", outFName);
-      if (PopUp(str, foo, 2)) return NULL;
+      if (PopUp(str, labels, 2)) return NULL;
     }
 
 
@@ -1818,7 +1876,7 @@ FILE *OpenOutFile(filename)
 /***************************************/
 int CloseOutFile(fp, filename, failed)
      FILE *fp;
-     char *filename;
+     const char *filename;
      int   failed;
 {
   char buf[64];
@@ -2236,7 +2294,7 @@ void DIRDeletedFile(name)
   char buf[MAXPATHLEN + 2], *tmp;
 
   strcpy(buf, name);
-  tmp = BaseName(buf);
+  tmp = (char *) BaseName(buf);  /* intentionally losing constness */
   *tmp = '\0';     /* truncate after last '/' */
 
   if (strcmp(path, buf)==0) LoadCurrentDirectory();
@@ -2298,20 +2356,20 @@ int *append;
 #endif
     if (stat(outFName, &st)==0) {    /* stat succeeded, file must exist */
 	if (ReadFileType(outFName) != RFT_PIC2) {
-	    static char *foo[] = { "\nOk", "\033Cancel" };
-	    char str[512];
+	    static const char *labels[] = { "\nOk", "\033Cancel" };
+	    char               str[512];
 
 	    sprintf(str,"Overwrite existing file '%s'?", outFName);
-	    if (PopUp(str, foo, 2))
+	    if (PopUp(str, labels, 2))
 		return (NULL);
 	} else {
-	    static char *foo[] = { "\nOk", "\033Cancel" };
-	    char str[512];
+	    static const char *labels[] = { "\nOk", "\033Cancel" };
+	    char               str[512];
 
 	    sprintf(str,"Append to existing file '%s'?", outFName);
-	    if (PopUp(str, foo, 2)) {
+	    if (PopUp(str, labels, 2)) {
 		sprintf(str,"Overwrite existing file '%s'?", outFName);
-		if (PopUp(str, foo, 2))
+		if (PopUp(str, labels, 2))
 		    return (NULL);
 	    } else
 		*append = 1;
@@ -2392,11 +2450,11 @@ int OpenOutFileDesc(filename)
 
   /* if didn't just create it, see if file exists (i.e., we're overwriting) */
   if (!dopipe && stat(outFName, &st)==0) {   /* stat succeeded, file exists */
-    static char *foo[] = { "\nOk", "\033Cancel" };
-    char str[512];
+    static const char *labels[] = { "\nOk", "\033Cancel" };
+    char               str[512];
 
     sprintf(str,"Overwrite existing file '%s'?", outFName);
-    if (PopUp(str, foo, 2)) return -1;
+    if (PopUp(str, labels, 2)) return -1;
   }
 
 

@@ -379,7 +379,7 @@ int col;
 static void drawTD(x,y,w,h)
 int x,y,w,h;
 {
-  char *title  = "Save TIFF file...";
+  const char *title  = "Save TIFF file...";
   int  i;
   XRectangle xr;
 

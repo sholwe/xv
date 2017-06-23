@@ -65,11 +65,11 @@ struct coding_spec {
 /* data needed per text window */
 typedef struct {  Window win, textW;
 		  int    vis, wasvis;
-		  char  *text;             /* text to be displayed */
+		  const char  *text;       /* text to be displayed */
 		  int    freeonclose;      /* free text when closing win */
 		  int    textlen;          /* length of text */
 		  char   title[TITLELEN];  /* name of file being displayed */
-		  char **lines;            /* ptr to array of line ptrs */
+		  const char **lines;     /* ptr to array of line ptrs */
 		  int    numlines;         /* # of lines in text */
 		  int    hexlines;         /* # of lines in HEX mode */
 		  int    maxwide;          /* length of longest line (ascii) */
@@ -194,7 +194,7 @@ etc.
 
 /***************************************************************/
 void CreateTextWins(geom, cmtgeom)
-     char *geom, *cmtgeom;
+     const char *geom, *cmtgeom;
 {
   int                   i, defwide, defhigh, cmthigh;
   XSizeHints            hints;
@@ -379,7 +379,7 @@ void CreateTextWins(geom, cmtgeom)
 
 /***************************************************************/
 int TextView(fname)
-     char *fname;
+     const char *fname;
 {
   /* given a filename, attempts to read in the file and open a textview win */
 
@@ -464,8 +464,8 @@ int TextView(fname)
 
 /***************************************************************/
 void OpenTextView(text, len, title, freeonclose)
-     char *text, *title;
-     int   len,   freeonclose;
+     const char *text, *title;
+     int   len, freeonclose;
 {
   /* opens up a textview window */
 
@@ -474,10 +474,11 @@ void OpenTextView(text, len, title, freeonclose)
   tv = &tinfo[0];
 
   /* kill off old text info */
-  if (tv->freeonclose && tv->text) free(tv->text);
+  if (tv->freeonclose && tv->text) free((void *)tv->text);
   if (tv->lines) free(tv->lines);
-  tv->text = (char *) NULL;
-  tv->lines = (char **) NULL;
+
+  tv->text = (const char *) NULL;
+  tv->lines = (const char **) NULL;
   tv->numlines = tv->textlen = tv->hexmode = 0;
 
 
@@ -693,11 +694,11 @@ static void closeText(tv)
   if (i==MAXTEXTWIN) anyTextUp = 0;
 
   /* free all info for this textview window */
-  if (tv->freeonclose && tv->text)  free(tv->text);
+  if (tv->freeonclose && tv->text)  free((void *)tv->text);
   if (tv->lines) free(tv->lines);
 
-  tv->text  = (char *) NULL;
-  tv->lines = (char **) NULL;
+  tv->text  = (const char *) NULL;
+  tv->lines = (const char **) NULL;
   tv->numlines = tv->textlen = tv->hexmode = 0;
 
 #ifdef TV_MULTILINGUAL
@@ -1099,7 +1100,8 @@ static void drawTextW(delta, sptr)
 #endif
   TVINFO *tv;
   char    linestr[512];
-  u_char  *sp, *ep, *lp;
+  byte   *lp;
+  const byte  *sp, *ep;
 
   /* figure out TVINFO pointer from SCRL pointer */
   for (i=0; i<MAXTVWIN && sptr != &tinfo[i].vscrl
@@ -1133,17 +1135,17 @@ static void drawTextW(delta, sptr)
 	int i;
 	int y;
 	struct ml_text *tp = tv->txt;
-	struct ml_line *lp;
+	struct ml_line *lp2;
 
 	XSetFunction(theDisp, theGC, GXcopy);
 	XSetClipMask(theDisp, theGC, None);
 	y = 3;
-	for (lp = &tp->lines[vpos], i = tp->nlines - vpos;
-		i > 0; lp++, i--) {
+	for (lp2 = &tp->lines[vpos], i = tp->nlines - vpos;
+		i > 0; lp2++, i--) {
 	    XDrawText16(theDisp, tv->textW, theGC,
-			-mfwide * hpos + 3, y + lp->ascent,
-			lp->items, lp->nitems);
-	    y += lp->ascent + lp->descent;
+			-mfwide * hpos + 3, y + lp2->ascent,
+			lp2->items, lp2->nitems);
+	    y += lp2->ascent + lp2->descent;
 	    if (y > tv->twHigh)
 		break;
 	}
@@ -1369,8 +1371,8 @@ static void drawTextW(delta, sptr)
 	/* generate hex for this line */
 	sprintf(hexstr, "0x%08x: ", lnum * 0x10);
 
-	sp = (byte *) tv->text + lnum * 0x10;
-	ep = (byte *) tv->text + tv->textlen;      /* ptr to end of buffer */
+	sp = (const byte *) tv->text + lnum * 0x10;
+	ep = (const byte *) tv->text + tv->textlen;      /* ptr to end of buffer */
 
 	for (j=0; j<16; j++) {
 	  if (sp+j < ep) sprintf(tmpstr,"%02x ", sp[j]);
@@ -1599,7 +1601,7 @@ static void computeText(tv)
   /* compute # of lines and linestarts array for given text */
 
   int   i,j,wide,maxwide,space;
-  byte *sp;
+  const byte *sp;
 
 #ifdef TV_L10N
   /* select code-set */
@@ -1609,7 +1611,7 @@ static void computeText(tv)
 
   if (!tv->text) {
     tv->numlines = tv->hexlines = 0;
-    tv->lines = (char **) NULL;
+    tv->lines = (const char **) NULL;
 #ifdef TV_MULTILINGUAL
     if (tv->cv_text != NULL) {
 	free(tv->cv_text);
@@ -1621,7 +1623,7 @@ static void computeText(tv)
   }
 
   /* count the # of newline characters in text */
-  for (i=0, sp=(byte *) tv->text, tv->numlines=0; i<tv->textlen; i++, sp++) {
+  for (i=0, sp=(const byte *) tv->text, tv->numlines=0; i<tv->textlen; i++, sp++) {
     if (*sp == '\n') tv->numlines++;
   }
 
@@ -1629,12 +1631,12 @@ static void computeText(tv)
   tv->numlines += 2;
 
   /* build lines array */
-  tv->lines = (char **) malloc(tv->numlines * sizeof(char *));
+  tv->lines = (const char **) malloc(tv->numlines * sizeof(char *));
   if (!tv->lines) FatalError("out of memory in computeText()");
 
   j = 0;
   tv->lines[j++] = tv->text;
-  for (i=0, sp=(byte *) tv->text; i<tv->textlen; i++, sp++) {
+  for (i=0, sp=(const byte *) tv->text; i<tv->textlen; i++, sp++) {
     if (*sp == '\n') tv->lines[j++] = (char *) (sp + 1);
   }
 
@@ -1657,7 +1659,7 @@ static void computeText(tv)
   maxwide = 0;
   for (i=0; i<tv->numlines-1; i++) {
     /* compute displayed width of line #i */
-    for (sp=(byte *) tv->lines[i], wide=0; sp<(byte *) tv->lines[i+1]-1;
+    for (sp=(const byte *) tv->lines[i], wide=0; sp<(const byte *) tv->lines[i+1]-1;
 	 sp++) {
       if (*sp == '\011') {   /* tab to next multiple of 8 */
 	space = ((wide+8) & (~7)) - wide;
@@ -1700,7 +1702,7 @@ static void computeText(tv)
 static int selectCodeset(tv)
      TVINFO *tv;
 {
-  u_char *sp;
+  const byte *sp;
   int i, len;
   int code = LOCALE_USASCII;	/* == 0 */
 
@@ -1709,7 +1711,7 @@ static int selectCodeset(tv)
 
   /* select code-set */
   if (xlocale) {
-    sp = (u_char *) tv->text;  i = 0;
+    sp = (const byte *) tv->text;  i = 0;
     while (i < len - 1) {
       if (*sp == 0x1b &&
 	  (*(sp+1) == '$' || *(sp+1) == '(' || *(sp+1) == ')')) {
@@ -1802,9 +1804,13 @@ void ShowLicense()
 
   /* build the license text */
 #ifdef LC
-#undef LC
+#  undef LC
 #endif
-#define LC(x) (strcat(license, x), strcat(license, "\n"))
+#ifdef __STDC__  /* since "x" is always a static string, this works: */
+#  define LC(x) (strcat(license, x "\n"))
+#else
+#  define LC(x) (strcat(license, x), strcat(license, "\n"))
+#endif
 
   LC("(Note: This has been changed, and hopefully clarified, from the 3.00");
   LC("version of this info.  Please read it.)");
@@ -1819,7 +1825,12 @@ void ShowLicense()
   LC("the xv distribution.  Do *not* send mail unless absolutely necessary");
   LC("(ie, you don't have ftp capability).");
   LC("");
-  LC("Note:  The docs (xvdocs.ps) may be installed in '/usr/local/lib'.");
+  LC("Note:  The documentation (README.jumbo, xvdocs.ps, and/or xvdocs.pdf)");
+#ifdef __STDC__
+  LC("may be installed in '" DOCDIR "'.");
+#else
+  LC("may be installed in '/usr/local/share/doc/xv'.");
+#endif
   LC("");
   LC("If you're viewing this information via the 'About XV' command, and");
   LC("you'd like to print it out, a copy of this info can be found in the ");
@@ -1829,7 +1840,7 @@ void ShowLicense()
   LC("");
   LC("XV Licensing Information");
   LC("------------------------");
-  LC("XV IS SHAREWARE FOR PERSONAL USE ONLY.  ");
+  LC("XV IS SHAREWARE FOR PERSONAL USE ONLY.");
   LC("");
   LC("You may use XV for your own amusement, and if you find it nifty,");
   LC("useful, generally cool, or of some value to you, your registration fee");
@@ -1878,7 +1889,7 @@ void ShowLicense()
   LC("are not.  All forms of payment must be payable in US Funds.  Checks");
   LC("must be payable through a US bank (or a US branch of a non-US bank).");
   LC("Purchase orders for less than $50, while still accepted, are not");
-  LC("encouraged. ");
+  LC("encouraged.");
   LC("");
   LC("All payments should be payable to 'John Bradley', and mailed to:");
   LC("        John Bradley");
@@ -1981,7 +1992,11 @@ void ShowKeyHelp()
   keyhelp[0] = '\0';
 
 #undef LC
-#define LC(x) (strcat(keyhelp, x), strcat(keyhelp, "\n"))
+#ifdef __STDC__  /* since "x" is always a static string, this works: */
+#  define LC(x) (strcat(keyhelp, x "\n"))
+#else
+#  define LC(x) (strcat(keyhelp, x), strcat(keyhelp, "\n"))
+#endif
 
   LC("XV Mouse and Keyboard Usage");
   LC("===========================");
@@ -2014,16 +2029,16 @@ void ShowKeyHelp()
   LC("");
   LC("Part 2:  Normal Keyboard Equivalents");
   LC("------------------------------------");
-  LC("The following keys can be used in most xv windows, including the ");
-  LC("image, controls, and color editor windows, but *not* in the visual");
-  LC("schnauzer windows.");
+  LC("The following keys can be used in most xv windows, including the");
+  LC("image, controls, and color editor windows, but *not* in the Visual");
+  LC("Schnauzer windows.");
   LC("");
-  LC("  Tab or ");
+  LC("  Tab or");
   LC("  Space         - 'Next' command");
   LC("");
   LC("  Return        - reload currently displayed image file");
   LC("");
-  LC("  Del or ");
+  LC("  Del or");
   LC("  Backspace     - 'Prev' command");
   LC("");
   LC("  ctrl+'l'      - 'Load' command");
@@ -2031,7 +2046,7 @@ void ShowKeyHelp()
   LC("  ctrl+'p'      - 'Print' command");
   LC("  ctrl+'d'      - 'Delete' command");
   LC("");
-  LC("  'q' or ");
+  LC("  'q' or");
   LC("  ctrl+'q'      - 'Quit' command");
   LC("");
   LC("  meta+'x'      - 'cut' command");
@@ -2067,7 +2082,7 @@ void ShowKeyHelp()
   LC("  's'           - smooth mode");
   LC("  meta+'8'      - toggle 8/24 bit mode");
   LC("");
-  LC("  'V' or ");
+  LC("  'V' or");
   LC("  ctrl+'v'      - Visual Schnauzer");
   LC("  'e'           - Color Editor");
   LC("  'i'           - Image Info");
@@ -2089,7 +2104,7 @@ void ShowKeyHelp()
   LC("  meta+'S'      - Spread algorithm");
   LC("");
   LC("  'R' or");
-  LC("  meta+'r' or ");
+  LC("  meta+'r' or");
   LC("  meta+'0'      - 'Reset' command in color editor");
   LC("");
   LC("  meta+'1'      - select preset 1 in color editor");
@@ -2102,7 +2117,7 @@ void ShowKeyHelp()
   LC("");
   LC("Part 2a:  Image Window Keys");
   LC("---------------------------");
-  LC("The following keys can *only* be used inside the image window.");
+  LC("The following keys can be used *only* inside the image window.");
   LC("");
   LC("  ctrl + Up     - crops 1 pixel off the bottom of the image");
   LC("  ctrl + Down   - crops 1 pixel off the top of the image");
@@ -2113,11 +2128,11 @@ void ShowKeyHelp()
   LC("  'p'           -  opens a 'go to page #' dialog box");
   LC("");
   LC("  PageUp, or");
-  LC("  Prev, or ");
+  LC("  Prev, or");
   LC("  shift+Up      - previous page");
   LC("");
   LC("  PageDown, or");
-  LC("  Next, or ");
+  LC("  Next, or");
   LC("  shift+Down    - next page");
   LC("");
   LC("");
@@ -2134,7 +2149,7 @@ void ShowKeyHelp()
   LC("");
   LC("Part 2b:  Visual Schnauzer Keys");
   LC("-------------------------------");
-  LC("The following keys can only be used in the visual schnauzer windows.");
+  LC("The following keys can be used only in the Visual Schnauzer windows.");
   LC("");
   LC("  ctrl+'d'      - delete file(s)");
   LC("  ctrl+'n'      - create new directory");
@@ -2211,7 +2226,7 @@ static char *(*cvtrtab[])PARM((char *, int, int *)) = {
 };
 
 static void createCsWins(geom)
-    char *geom;
+    const char *geom;
 {
     XSetWindowAttributes xswa;
     int i, j;

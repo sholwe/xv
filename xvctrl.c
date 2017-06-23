@@ -83,74 +83,74 @@ static XRectangle butrect;
    in xv.h */
 
 
-static char *dispMList[] = { "Raw\tr",
-			     "Dithered\td",
-			     "Smooth\ts",
-			     MBSEP,
-			     "Read/Write Colors",
-			     MBSEP,
-			     "Normal Colors",
-			     "Perfect Colors",
-			     "Use Own Colormap",
-			     "Use Std. Colormap" };
+static const char *dispMList[] = { "Raw\tr",
+				   "Dithered\td",
+				   "Smooth\ts",
+				   MBSEP,
+				   "Read/Write Colors",
+				   MBSEP,
+				   "Normal Colors",
+				   "Perfect Colors",
+				   "Use Own Colormap",
+				   "Use Std. Colormap" };
 
-static char *rootMList[] = { "Window",
-			     "Root: tiled",
-			     "Root: integer tiled",
-			     "Root: mirrored",
-			     "Root: integer mirrored",
-			     "Root: center tiled",
-			     "Root: centered",
-			     "Root: centered, warp",
-			     "Root: centered, brick",
-    		             "Root: symmetrical tiled",
-			     "Root: symmetrical mirrored",
-			     "Root: upper left corner" };
+static const char *rootMList[] = { "Window",
+				   "Root: tiled",
+				   "Root: integer tiled",
+				   "Root: mirrored",
+				   "Root: integer mirrored",
+				   "Root: center tiled",
+				   "Root: centered",
+				   "Root: centered, warp",
+				   "Root: centered, brick",
+				   "Root: symmetrical tiled",
+				   "Root: symmetrical mirrored",
+				   "Root: upper left corner" };
 
-static char *conv24MList[] = { "8-bit mode\t\2448",
-			       "24-bit mode\t\2448",
-			       MBSEP,
-			       "Lock current mode",
-			       MBSEP,
-                               "Quick 24->8",
-			       "Slow 24->8",
-			       "Best 24->8" };
+static const char *conv24MList[] = { "8-bit mode\t\2448",
+				     "24-bit mode\t\2448",
+				     MBSEP,
+				     "Lock current mode",
+				     MBSEP,
+				     "Quick 24->8",
+				     "Slow 24->8",
+				     "Best 24->8" };
 
-static char *algMList[]    = { "Undo All\t\244u",
-			       MBSEP,
- 			       "Blur...\t\244b",
-			       "Sharpen...\t\244s",
-			       "Edge Detect\t\244e",
-			       "Emboss\t\244m",
-			       "Oil Painting\t\244o",
-			       "Blend\t\244B",
-			       "Copy Rotate...\t\244t",
-			       "Clear Rotate...\t\244T",
-			       "Pixelize...\t\244p",
-			       "Spread...\t\244S",
-			       "DeSpeckle...\t\244k"};
+static const char *algMList[] = { "Undo All\t\244u",
+				  MBSEP,
+				  "Blur...\t\244b",
+				  "Sharpen...\t\244s",
+				  "Edge Detect\t\244e",
+				  "Emboss\t\244m",
+				  "Oil Painting\t\244o",
+				  "Blend\t\244B",
+				  "Copy Rotate...\t\244t",
+				  "Clear Rotate...\t\244T",
+				  "Pixelize...\t\244p",
+				  "Spread...\t\244S",
+				  "DeSpeckle...\t\244k"};
 
-static char *sizeMList[]   = { "Normal\tn",
-			       "Max Size\tm",
-			       "Maxpect\tM",
-			       "Double Size\t>",
-			       "Half Size\t<",
-			       "10% Larger\t.",
-			       "10% Smaller\t,",
-			       MBSEP,
-			       "Set Size\tS",
-			       "Re-Aspect\ta",
-			       "4x3\t4",
-			       "Int. Expand\tI" };
+static const char *sizeMList[] = { "Normal\tn",
+				   "Max Size\tm",
+				   "Maxpect\tM",
+				   "Double Size\t>",
+				   "Half Size\t<",
+				   "10% Larger\t.",
+				   "10% Smaller\t,",
+				   MBSEP,
+				   "Set Size\tS",
+				   "Re-Aspect\ta",
+				   "4x3\t4",
+				   "Int. Expand\tI" };
 
-static char *windowMList[] = { "Visual Schnauzer\t^v",
-			       "Color Editor\te",
-			       "Image Info\ti",
-			       "Image Comments\t^c",
-			       "Text View\t^t",
-			       MBSEP,
-			       "About XV\t^a",
-			       "XV Keyboard Help"};
+static const char *windowMList[] = { "Visual Schnauzer\t^v",
+				     "Color Editor\te",
+				     "Image Info\ti",
+				     "Image Comments\t^c",
+				     "Text View\t^t",
+				     MBSEP,
+				     "About XV\t^a",
+				     "XV Keyboard Help"};
 
 
 
@@ -161,7 +161,7 @@ static void ls3d         PARM((LIST *));
 
 /***************************************************/
 void CreateCtrl(geom)
-     char *geom;
+     const char *geom;
 {
   int listh, topskip;
   double skip;

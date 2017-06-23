@@ -44,9 +44,9 @@ static int loadpam  PARM((FILE *, PICINFO *, int, int));
 static int getint   PARM((FILE *, PICINFO *));
 static int getbit   PARM((FILE *, PICINFO *));
 static int getshort PARM((FILE *));
-static int pbmError PARM((char *, char *));
+static int pbmError PARM((const char *, const char *));
 
-static char *bname;
+static const char *bname;
 
 
 #ifdef HAVE_MGCSFX
@@ -675,7 +675,18 @@ static int getshort(fp)
 
   numgot++;
 
+  /* Sometime after 1995, NetPBM's ppm(5) man page was changed to say, "Each
+   * sample is represented in pure binary by either 1 or 2 bytes.  If the
+   * Maxval is less than  256, it is 1 byte.  Otherwise, it is 2 bytes.  The
+   * most significant byte is first."  This change is incompatible with
+   * images created for viewing with all previous versions of XV, however,
+   * so both approaches are left available as a compile-time option.  (Could
+   * make it runtime-selectable, too, but unclear whether anybody cares.) */
+#ifdef ASSUME_RAW_PPM_LSB_FIRST  /* legacy approach */
   return (c2 << 8) | c1;
+#else /* MSB first */
+  return (c1 << 8) | c2;
+#endif
 }
 
 
@@ -736,7 +747,7 @@ static int getbit(fp, pinfo)
 
 /*******************************************/
 static int pbmError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;
@@ -850,7 +861,7 @@ int WritePBM(fp,pic,ptype,w,h,rmap,gmap,bmap,numcols,colorstyle,raw,comment)
 
   else if (colorstyle==2) {             /* 1-bit B/W stipple */
     int bit,k,flipbw;
-    char *str0, *str1;
+    const char *str0, *str1;
 
     /* shouldn't happen */
     if (ptype == PIC24) FatalError("PIC24 and B/W Stipple in WritePBM()\n");

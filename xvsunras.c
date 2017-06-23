@@ -39,7 +39,7 @@ struct rasterfile {
 #define RAS_RLE 0x80
 
 
-static int  sunRasError    PARM((char *, char *));
+static int  sunRasError    PARM((const char *, const char *));
 static int  rle_read       PARM((byte *, int, int, FILE *, int));
 static void sunRas1to8     PARM((byte *, byte *, int));
 static void sunRas8to1     PARM((byte *, byte *, int, int));
@@ -57,7 +57,7 @@ int LoadSunRas(fname, pinfo)
   int	 linesize,lsize,csize,isize,i,w,h,d,npixels,nbytes;
   byte	 *image, *line;
   struct rasterfile sunheader;
-  char   *bname;
+  const char *bname;
 
   bname = BaseName(fname);
 
@@ -318,7 +318,7 @@ FILE *fp;
 
 /*****************************/
 static int sunRasError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;

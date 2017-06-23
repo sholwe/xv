@@ -24,9 +24,9 @@
 
 #define TRUNCSTR "File appears to be truncated."
 
-static int zxError PARM((char *, char *));
+static int zxError PARM((const char *, const char *));
 
-static char *bname;
+static const char *bname;
 
 /*******************************************/
 int LoadZX(fname, pinfo)
@@ -153,7 +153,7 @@ int LoadZX(fname, pinfo)
 
 /*******************************************/
 static int zxError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;
@@ -165,12 +165,12 @@ static int zxError(fname, st)
 
 byte ZXheader[128] =
 {
-        'P', 'L', 'U', 'S', '3', 'D', 'O', 'S', 26,  /* Spectrum +3DOS file */
-	  1,   0, 				     /* Header type 1.0 */
-	128,  27,  0,   0,			     /* 7040 bytes */
-	  3,	                                     /* Binary format */
-          0, 27,   				     /* 6912 data bytes */
-	  0, 64					     /* load address 0x4000 */
+    'P', 'L', 'U', 'S', '3', 'D', 'O', 'S', 26,	 /* Spectrum +3DOS file */
+      1,   0, 					 /* Header type 1.0 */
+    128,  27,  0,   0,				 /* 7040 bytes */
+      3,	                                 /* Binary format */
+      0, 27,   					 /* 6912 data bytes */
+      0, 64					 /* load address 0x4000 */
 };
 
 

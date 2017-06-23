@@ -30,16 +30,17 @@ typedef int boolean;
 #define NEXTBYTE (*dataptr++)
 #define SKIPBYTE (dataptr++)	/* quiet some compiler warnings */
 #define EXTENSION     0x21
-#define IMAGESEP      0x2c
+#define IMAGESEP      0x2c	/* a.k.a. Image Descriptor */
 #define TRAILER       0x3b
 #define INTERLACEMASK 0x40
 #define COLORMAPMASK  0x80
 
 
 
-FILE *fp;
+static FILE *fp;
 
-int BitOffset = 0,		/* Bit Offset of next code */
+static int
+    BitOffset = 0,		/* Bit Offset of next code */
     XC = 0, YC = 0,		/* Output X and Y coords of current pixel */
     Pass = 0,			/* Used by output routine if interlaced pic */
     OutCount = 0,		/* Decompressor output 'stack count' */
@@ -47,7 +48,7 @@ int BitOffset = 0,		/* Bit Offset of next code */
     Width, Height,		/* image dimensions */
     LeftOfs, TopOfs,		/* image offset */
     BitsPerPixel,		/* Bits per pixel, read from GIF header */
-    BytesPerScanline,		/* bytes per scanline in output raster */
+/*  BytesPerScanline,	*/	/* bytes per scanline in output raster */
     ColorMapSize,		/* number of colors */
     Background,			/* background color */
     Transparent,		/* transparent color (GRR 19980314) */
@@ -59,31 +60,34 @@ int BitOffset = 0,		/* Bit Offset of next code */
     EOFCode,			/* GIF end-of-information code */
     CurCode, OldCode, InCode,	/* Decompressor variables */
     FirstFree,			/* First free code, generated per GIF spec */
-    FreeCode,			/* Decompressor,next free slot in hash table */
+    FreeCode,			/* Decompressor, next free slot in hash table */
     FinChar,			/* Decompressor variable */
     BitMask,			/* AND mask for data size */
     ReadMask,			/* Code AND mask for current code size */
-    Misc;                       /* miscellaneous bits (interlace, local cmap)*/
+    Misc,                       /* miscellaneous bits (interlace, local cmap)*/
+    GlobalBitsPerPixel,		/* may have local colormap of different size */
+    GlobalColorMapSize,		/*   (ditto)  */
+    GlobalBitMask;		/*   (ditto)  */
 
 
-boolean Interlace, HasColormap;
+static boolean Interlace, HasGlobalColormap;
 
-byte *RawGIF;			/* The heap array to hold it, raw */
-byte *Raster;			/* The raster data stream, unblocked */
-byte *pic8;
+static byte *RawGIF;		/* The heap array to hold it, raw */
+static byte *Raster;		/* The raster data stream, unblocked */
+static byte *pic8;
 
     /* The hash table used by the decompressor */
-int Prefix[4096];
-int Suffix[4096];
+static int Prefix[4096];
+static int Suffix[4096];
 
     /* An output array used by the decompressor */
-int OutCode[4097];
+static int OutCode[4097];
 
-int   gif89 = 0;
-char *id87 = "GIF87a";
-char *id89 = "GIF89a";
+static int gif89 = 0;
+static const char *id87 = "GIF87a";
+static const char *id89 = "GIF89a";
 
-static int EGApalette[16][3] = {
+static int const EGApalette[16][3] = {
   {0,0,0},       {0,0,128},     {0,128,0},     {0,128,128},
   {128,0,0},     {128,0,128},   {128,128,0},   {200,200,200},
   {100,100,100}, {100,100,255}, {100,255,100}, {100,255,255},
@@ -93,13 +97,12 @@ static int EGApalette[16][3] = {
 static int   readImage   PARM((PICINFO *));
 static int   readCode    PARM((void));
 static void  doInterlace PARM((int));
-static int   gifError    PARM((PICINFO *, char *));
-static void  gifWarning  PARM((char *));
+static int   gifError    PARM((PICINFO *, const char *));
+static void  gifWarning  PARM((const char *));
 
-int   filesize;
-char *bname;
-
-byte *dataptr;
+static int         filesize;
+static const char *bname;
+static byte       *dataptr;
 
 
 /*****************************/
@@ -169,11 +172,13 @@ int LoadGIF(fname, pinfo)
   if (DEBUG) fprintf(stderr,"GIF89 logical screen = %d x %d\n",RWidth,RHeight);
 
   ch = NEXTBYTE;
-  HasColormap = ((ch & COLORMAPMASK) ? True : False);
+  HasGlobalColormap = ((ch & COLORMAPMASK) ? True : False);
 
-  BitsPerPixel = (ch & 7) + 1;
-  numcols = ColorMapSize = 1 << BitsPerPixel;
-  BitMask = ColorMapSize - 1;
+  /* GRR 20070318:  fix decoding bug when global and local color-table sizes
+   *                differ */
+  GlobalBitsPerPixel = BitsPerPixel = (ch & 7) + 1;
+  GlobalColorMapSize = ColorMapSize = numcols = 1 << BitsPerPixel;
+  GlobalBitMask = BitMask = ColorMapSize - 1;
 
   Background = NEXTBYTE;		/* background color... not used. */
 
@@ -189,15 +194,15 @@ int LoadGIF(fname, pinfo)
 
   /* Read in global colormap. */
 
-  if (HasColormap)
+  if (HasGlobalColormap)
     for (i=0; i<ColorMapSize; i++) {
       r[i] = NEXTBYTE;
       g[i] = NEXTBYTE;
       b[i] = NEXTBYTE;
     }
-  else {  /* no colormap in GIF file */
+  else {  /* no _global_ colormap in GIF file (but may have local one(s)) */
     /* put std EGA palette (repeated 16 times) into colormap, for lack of
-       anything better to do */
+       anything better to do at the moment */
 
     for (i=0; i<256; i++) {
       r[i] = EGApalette[i&15][0];
@@ -208,6 +213,15 @@ int LoadGIF(fname, pinfo)
   memcpy(pinfo->r, r, sizeof r);
   memcpy(pinfo->g, g, sizeof g);
   memcpy(pinfo->b, b, sizeof b);
+
+  if (DEBUG > 1) {
+    fprintf(stderr,"  global color table%s:\n",
+      HasGlobalColormap? "":" (repeated EGA palette)");
+    for (i=0; i<ColorMapSize; i++) {
+      fprintf(stderr,"    (%3d  %02x,%02x,%02x)\n", i, pinfo->r[i],
+        pinfo->g[i], pinfo->b[i]);
+    }
+  }
 
   /* possible things at this point are:
    *   an application extension block
@@ -403,18 +417,28 @@ int LoadGIF(fname, pinfo)
 
 
     else if (block == IMAGESEP) {
-      if (DEBUG) fprintf(stderr,"imagesep (page=%d)  ",pinfo->numpages+1);
-      if (DEBUG) fprintf(stderr,"  at start: offset=0x%x\n",dataptr-RawGIF);
+      if (DEBUG) fprintf(stderr, "imagesep (page=%d)\n", pinfo->numpages+1);
+      if (DEBUG) fprintf(stderr, "  at start: offset=0x%lx\n",
+                         (unsigned long)(dataptr-RawGIF));
 
       BitOffset = XC = YC = Pass = OutCount = 0;
 
       if (pinfo->numpages > 0) {   /* do multipage stuff */
 	if (pinfo->numpages == 1) {    /* first time only... */
-	  xv_mktemp(pinfo->pagebname, "xvpgXXXXXX");
+	  xv_mktemp(pinfo->pagebname, "xvpgXXXXXX"); // a.k.a. close(mkstemp())
 	  if (pinfo->pagebname[0] == '\0') {
 	    ErrPopUp("LoadGIF: Unable to create temporary filename???",
 			"\nHow unlikely!");
 	    return 0;
+	  }
+	  /* GRR 20070328:  basename file doesn't go away, at least on Linux
+           *  (though all appended-number ones do); ergo, open for reading (see
+           *  if it's there), close, and explicitly unlink() if necessary */
+          /* GRR 20070506:  could/should call KillPageFiles() (xv.c) instead */
+	  fp = xv_fopen(pinfo->pagebname, "r");
+	  if (fp) {
+	    fclose(fp);
+	    unlink(pinfo->pagebname);  /* no errors during testing */
 	  }
 	}
 	sprintf(tmpname, "%s%d", pinfo->pagebname, pinfo->numpages);
@@ -432,14 +456,18 @@ int LoadGIF(fname, pinfo)
 	fclose(fp);
 	free(pinfo->pic);
 	pinfo->pic = (byte *) NULL;
-	if (HasColormap) {
+	if (HasGlobalColormap) {
 	  memcpy(pinfo->r, r, sizeof r);
 	  memcpy(pinfo->g, g, sizeof g);
 	  memcpy(pinfo->b, b, sizeof b);
 	}
+        BitsPerPixel = GlobalBitsPerPixel;
+        numcols = ColorMapSize = GlobalColorMapSize;
+        BitMask = GlobalBitMask;
       }
-      if (readImage(pinfo)) pinfo->numpages++;
-      if (DEBUG) fprintf(stderr,"  at end:   dataptr=0x%x\n",dataptr-RawGIF);
+      if (readImage(pinfo)) ++pinfo->numpages;
+      if (DEBUG) fprintf(stderr, "  at end:   offset=0x%lx\n",
+                         (unsigned long)(dataptr-RawGIF));
     }
 
 
@@ -455,8 +483,8 @@ int LoadGIF(fname, pinfo)
 
       /* don't mention bad block if file was trunc'd, as it's all bogus */
       if ((dataptr - origptr) < filesize) {
-	sprintf(str, "Unknown block type (0x%02x) at offset 0x%x",
-		block, (dataptr - origptr) - 1);
+	sprintf(str, "Unknown block type (0x%02x) at offset 0x%lx",
+		block, (unsigned long)(dataptr - origptr) - 1);
 
 	if (!pinfo->numpages) return gifError(pinfo, str);
 	else gifWarning(str);
@@ -510,6 +538,7 @@ static int readImage(pinfo)
 {
   register byte ch, ch1, *ptr1, *picptr;
   int           i, npixels, maxpixels;
+  boolean       HasLocalColormap;
 
   npixels = maxpixels = 0;
 
@@ -526,17 +555,29 @@ static int readImage(pinfo)
 
   Misc = NEXTBYTE;
   Interlace = ((Misc & INTERLACEMASK) ? True : False);
+  HasLocalColormap = ((Misc & COLORMAPMASK) ? True : False);
 
-  if (Misc & 0x80) {
-    for (i=0; i< 1 << ((Misc&7)+1); i++) {
+  if (HasLocalColormap) {
+    BitsPerPixel = (Misc & 7) + 1;
+    ColorMapSize = numcols = 1 << BitsPerPixel;  /* GRR 20070318 */
+    BitMask = ColorMapSize - 1;
+    if (DEBUG) fprintf(stderr,"  local color table, %d bits (%d entries)\n",
+      (Misc&7)+1, ColorMapSize);
+    for (i=0; i<ColorMapSize; i++) {
       pinfo->r[i] = NEXTBYTE;
       pinfo->g[i] = NEXTBYTE;
       pinfo->b[i] = NEXTBYTE;
     }
+    if (DEBUG > 1) {
+      for (i=0; i<ColorMapSize; i++) {
+        fprintf(stderr,"    (%3d  %02x,%02x,%02x)\n", i, pinfo->r[i],
+          pinfo->g[i], pinfo->b[i]);
+      }
+    }
   }
 
 
-  if (!HasColormap && !(Misc&0x80)) {
+  if (!HasGlobalColormap && !HasLocalColormap) {
     /* no global or local colormap */
     SetISTR(ISTR_WARNING, "%s:  %s", bname,
 	    "No colormap in this GIF file.  Assuming EGA colors.");
@@ -599,7 +640,7 @@ static int readImage(pinfo)
 
 
   if (DEBUG) {
-    fprintf(stderr,"xv: LoadGIF() - picture is %dx%d, %d bits, %sinterlaced\n",
+    fprintf(stderr,"LoadGIF: image is %dx%d, %d bits, %sinterlaced\n",
 	    Width, Height, BitsPerPixel, Interlace ? "" : "non-");
   }
 
@@ -822,8 +863,8 @@ static void doInterlace(Index)
 
 /*****************************/
 static int gifError(pinfo, st)
-     PICINFO *pinfo;
-     char    *st;
+     PICINFO    *pinfo;
+     const char *st;
 {
   gifWarning(st);
 
@@ -844,7 +885,7 @@ static int gifError(pinfo, st)
 
 /*****************************/
 static void gifWarning(st)
-     char *st;
+     const char *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", bname, st);
 }

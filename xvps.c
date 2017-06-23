@@ -73,7 +73,7 @@ static void psColorMap     PARM((FILE *fp, int, int, byte *, byte *, byte *));
 static void psRleCmapImage PARM((FILE *, int));
 static void epsPreview     PARM((FILE *, byte *, int, int, int, int,
 				 byte *, byte *, byte *, int));
-static int  writeBWStip    PARM((FILE *, byte *, char *, int, int, int));
+static int  writeBWStip    PARM((FILE *, byte *, const char *, int, int, int));
 
 #ifdef GS_PATH
 static void buildCmdStr    PARM((char *, char *, char *, int, int));
@@ -406,7 +406,7 @@ void PSResize()
 static void drawPSD(x,y,w,h)
 int x,y,w,h;
 {
-  char *title = "Save PostScript File...";
+  const char *title = "Save PostScript File...";
   int  i,cx;
   XRectangle xr;
 
@@ -466,12 +466,14 @@ int x,y,w,h;
 /***************************************************/
 static void drawPosStr()
 {
-  int x,y;
-  double cmx, cmy, inx, iny;
-  char   str[64], str1[64], *xst, *yst;
+  int         x,y;
+  double      cmx, cmy, inx, iny;
+  char        str[64], str1[64];
+  const char *xst, *yst;
 
   x = 256;  y = 190 + 13;
-  inx = iny = 0;  xst = yst = (char *) NULL;
+  inx = iny = 0;
+  xst = yst = (const char *) NULL;
 
   switch (posxType) {
   case 0:  xst = "Left: ";  inx = pos_inx;                      break;
@@ -1493,7 +1495,7 @@ static void epsPreview(fp, pic, ptype, colorType, w, h, rmap,gmap,bmap,
 static int writeBWStip(fp, pic, prompt, w, h, flipbw)
      FILE *fp;
      byte *pic;
-     char *prompt;
+     const char *prompt;
      int  w, h, flipbw;
 {
   /* write the given 'pic' (B/W stippled, 1 byte per pixel, 0=blk,1=wht)
@@ -1586,8 +1588,8 @@ int LoadPS(fname, pinfo, quick)
   mktemp(tmpname);
 #endif
   if (tmpname[0] == '\0') {   /* mktemp() or mkstemp() blew up */
-    sprintf(str,"LoadPS: Unable to create temporary filename???");
-    ErrPopUp(str, "\nHow unlikely!");
+    sprintf(dummystr,"LoadPS: Unable to create temporary filename???");
+    ErrPopUp(dummystr, "\nHow unlikely!");
     return 0;
   }
   strcat(tmpname,".");

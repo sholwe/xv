@@ -76,7 +76,7 @@ void BTCreate(bp,win,x,y,w,h,str,fg,bg,hi,lo)
      Window        win;
      int           x,y;
      unsigned int  w,h;
-     char         *str;
+     const char   *str;
      unsigned long fg,bg,hi,lo;
 {
   bp->win = win;
@@ -290,7 +290,7 @@ RBUTT *RBCreate(rblist, win, x,y,str, fg, bg, hi, lo)
       RBUTT        *rblist;
       Window        win;
       int           x,y;
-      char         *str;
+      const char   *str;
       unsigned long fg,bg,hi,lo;
 {
   /* mallocs an RBUTT, fills in the fields, and appends it to rblist
@@ -671,7 +671,7 @@ void CBCreate(cb, win, x,y, str, fg, bg, hi, lo)
       CBUTT        *cb;
       Window        win;
       int           x,y;
-      char         *str;
+      const char   *str;
       unsigned long fg,bg,hi,lo;
 {
   /* fill in the fields of the structure */
@@ -837,13 +837,13 @@ int lit;
 
 
 /***********************************************/
-void MBCreate(mb, win, x,y,w,h, str, list, nlist, fg, bg, hi, lo)
+void MBCreate(mb, win, x, y, w, h, title, list, nlist, fg, bg, hi, lo)
      MBUTT        *mb;
      Window        win;
      int           x,y;
      unsigned int  w,h;
-     char         *str;
-     char        **list;
+     const char   *title;
+     const char  * const *list;
      int           nlist;
      unsigned long fg,bg,hi,lo;
 {
@@ -864,7 +864,7 @@ void MBCreate(mb, win, x,y,w,h, str, list, nlist, fg, bg, hi, lo)
   mb->y        = y;
   mb->w        = w;
   mb->h        = h;
-  mb->title    = str;
+  mb->title    = title;
   mb->active   = 1;
   mb->list     = list;
   mb->nlist    = nlist;
@@ -944,7 +944,9 @@ void MBRedraw(mb)
   }
 
   else {                                    /* draw string centered in butt */
-    char *str, stbuf[256];
+    const char *str;
+    char       *tmp;
+    char        stbuf[256];
 
     if (mb->title) str = mb->title;
     else {  /* find first checked item, and show that as the title */
@@ -960,7 +962,7 @@ void MBRedraw(mb)
 
     /* truncate at TAB, if any */
     strcpy(stbuf, str);
-    if ((str = (char *) index(stbuf, '\t')) != NULL) *str = '\0';
+    if ((tmp = (char *) index(stbuf, '\t')) != NULL) *tmp = '\0';
     str = stbuf;
 
     x1 = CENTERX(mfinfo, x + w/2, str);
@@ -1137,6 +1139,7 @@ int MBTrack(mb)
   y = ASCENT + SPACING + extratop;
   for (i=0; i<mb->nlist; i++) {
     char txtstr[256], *tabstr;
+
     strcpy(txtstr, mb->list[i]);
     if ((tabstr = (char *) index(txtstr, '\t'))) {
       *tabstr = '\0';  tabstr++;

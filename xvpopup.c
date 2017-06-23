@@ -13,7 +13,6 @@
  *   OpenAlert(str)        -  maps a button-less window
  *   CloseAlert()          -  closes a button-less window
  *   PUCheckEvent(event)   -  called by event handler
- *   TextRect()            -  draws semi-complex strings in a rectangle
  */
 
 #include "copyright.h"
@@ -31,8 +30,9 @@
 
 #define BUTTH   24
 
-static int  doPopUp       PARM((char *, char **, int, int, char *));
+static int  doPopUp       PARM((const char *, const char **, int, int, const char *));
 static void attachPUD     PARM((void));
+static void TextRect      PARM((Window, const char *, int, int, int, int, u_long));
 static void createPUD     PARM((void));
 static void drawPUD       PARM((int, int, int, int));
 static void drawPadOMStr  PARM((void));
@@ -42,8 +42,8 @@ static int  doGSKey       PARM((int));
 static void changedGSBuf  PARM((void));
 static void drawGSBuf     PARM((void));
 static void buildPadLists PARM((void));
-static void build1PadList PARM((char *, char **, char **, int *,
-				char **, char **, int));
+static void build1PadList PARM((const char *, const char **, const char **, int *,
+				const char **, const char **, int));
 
 
 /* values 'popUp' can take */
@@ -58,20 +58,21 @@ static void build1PadList PARM((char *, char **, char **, int *,
 #define HIDESTR  "Hide XV windows"
 
 /* local variables */
-Window popW;
-int    nbts, selected, popUp=0, firsttime=1;
-int    puwide = PUWIDE;
-int    puhigh = PUHIGH;
-BUTT  *bts;
-char  *text;
-char   accel[8];
+static Window      popW;
+static int         nbts, selected, popUp=0, firsttime=1;
+static int         puwide = PUWIDE;
+static int         puhigh = PUHIGH;
+static BUTT       *bts;
+static const char *text;
+static char        accel[8];
 
-char *gsBuf, *gsFilter;       /* stuff needed for GetStrPopUp() handling */
-int   gsBufLen, gsAllow, gsCurPos, gsStPos, gsEnPos;
-int   gsx, gsy, gsw, gsh;
+static char       *gsBuf;       /* stuff needed for GetStrPopUp() handling */
+static const char *gsFilter;
+static int         gsBufLen, gsAllow, gsCurPos, gsStPos, gsEnPos;
+static int         gsx, gsy, gsw, gsh;
 
 /* stuff for GrabPopUp */
-CBUTT ahideCB;
+static CBUTT ahideCB;
 
 
 /*** stuff for PadPopUp ***/
@@ -83,48 +84,51 @@ static int    padHaveDooDads = 0;
 static int    padMode, padOMode;
 static DIAL   padWDial, padHDial, padODial;
 
-static int    padMthdLen=3;
-static char  *padMthdNames[] = { "Solid Fill", "Run 'bggen'", "Load Image" };
+static int         padMthdLen=3;
+static const char *padMthdNames[] = { "Solid Fill", "Run 'bggen'", "Load Image" };
 
-static int    padColDefLen = 9;
-static char  *padColDefNames[] = { "black", "red",  "yellow", "green",
-				   "cyan",  "blue", "magenta", "white",
-				   "50% gray" };
+static int         padColDefLen = 9;
+static const char *padColDefNames[] = { "black", "red",  "yellow", "green",
+					"cyan",  "blue", "magenta", "white",
+					"50% gray" };
 
-static char  *padColDefVals[]  = { "black", "red", "yellow", "green",
-				   "cyan",  "blue", "magenta", "white",
-                                   "gray50" };
+static const char *padColDefVals[]  = { "black", "red", "yellow", "green",
+					"cyan",  "blue", "magenta", "white",
+					"gray50" };
 
-static int    padBgDefLen = 8;
-static char  *padBgDefNames[] = {
-  "Black->White",
-  "Blue Gradient",
-  "RGB Rainbow",
-  "Full Rainbow",
-  "Color Assortment",
-  "Green Tiles",
-  "Red Balls",
-  "Red+Yellow Diamonds" };
+static int         padBgDefLen = 8;
+static const char *padBgDefNames[] = { "Black->White",
+				       "Blue Gradient",
+				       "RGB Rainbow",
+				       "Full Rainbow",
+				       "Color Assortment",
+				       "Green Tiles",
+				       "Red Balls",
+				       "Red+Yellow Diamonds" };
 
-static char  *padBgDefVals[]  = {
-  "black white",
-  "100 100 255  50 50 150",
-  "red green blue",
-  "black red yellow green blue purple black",
-  "black white red black yellow white green black cyan white blue black magenta white red yellow green cyan blue magenta red",
-  "green black -r 30 -G 32x32",
-  "red black -r 45 -G 32x32",
-  "red yellow -r 45 -G 32x32" };
+static const char *padBgDefVals[] = { "black white",
+				      "100 100 255  50 50 150",
+				      "red green blue",
+				      "black red yellow green blue purple black",
+				      "black white red black yellow white green black cyan white blue black magenta white red yellow green cyan blue magenta red",
+				      "green black -r 30 -G 32x32",
+				      "red black -r 45 -G 32x32",
+				      "red yellow -r 45 -G 32x32" };
 
 
 /* this should match with PAD_O* defs in xv.h */
-static char *padOMStr[] = { "RGB", "Int.", "Hue", "Sat." };
+static const char *padOMStr[] = { "RGB", "Int.", "Hue", "Sat." };
 
 #define PAD_MAXDEFLEN 10
-static int    padColLen = 0, padBgLen = 0, padLoadLen = 0;
-static char  *padColNames [PAD_MAXDEFLEN], *padColVals [PAD_MAXDEFLEN];
-static char  *padBgNames  [PAD_MAXDEFLEN], *padBgVals  [PAD_MAXDEFLEN];
-static char  *padLoadNames[PAD_MAXDEFLEN], *padLoadVals[PAD_MAXDEFLEN];
+static int         padColLen = 0;
+static const char *padColNames [PAD_MAXDEFLEN];
+static const char *padColVals  [PAD_MAXDEFLEN];
+static int         padBgLen = 0;
+static const char *padBgNames  [PAD_MAXDEFLEN];
+static const char *padBgVals   [PAD_MAXDEFLEN];
+static int         padLoadLen = 0;
+static const char *padLoadNames[PAD_MAXDEFLEN];
+static const char *padLoadVals [PAD_MAXDEFLEN];
 
 
 /***************************************************/
@@ -175,16 +179,20 @@ void CenterMapWindow(win, dx, dy, w, h)
 
 /***************************************************/
 int PopUp(txt, labels, n)
-     char *txt, *labels[];
-     int   n;
+     const char *txt;
+     const char *labels[];
+     int         n;
 {
   return doPopUp(txt, labels, n, ISPOPUP, "xv confirm");
 }
 
+
 /***************************************************/
 static int doPopUp(txt, labels, n, poptyp, wname)
-     char *txt, *labels[], *wname;
-     int   n, poptyp;
+     const char *txt;
+     const char *labels[];
+     int         n, poptyp;
+     const char *wname;
 {
   int    i;
   XEvent event;
@@ -317,7 +325,8 @@ static int doPopUp(txt, labels, n, poptyp, wname)
 
 /***************************************************/
 void ErrPopUp(txt, label)
-     char *txt, *label;
+     const char *txt;
+     const char *label;
 {
   /* simplified interface to PopUp.  Takes a string and the label for the
      (one) button */
@@ -328,7 +337,10 @@ void ErrPopUp(txt, label)
 
 /***************************************************/
 int GetStrPopUp(txt, labels, n, buf, buflen, filstr, allow)
-     char *txt, *labels[], *buf, *filstr;
+     const char *txt;
+     const char *labels[];
+     char *buf;
+     const char *filstr;
      int   n, buflen, allow;
 {
   /* pops up a window with a prompt string, a 1-line editable
@@ -376,9 +388,9 @@ int GrabPopUp(pHide, pDelay)
 {
   /* pops up Grab options dialog box */
 
-  int  rv;
-  char delaybuf[32], grabTxt[1024];
-  static char *grabLabels[] = { "\nGrab", "aAutoGrab", "\033Cancel" };
+  int                rv;
+  char               delaybuf[32], grabTxt[1024];
+  static const char *grabLabels[] = { "\nGrab", "aAutoGrab", "\033Cancel" };
 
   sprintf(delaybuf,"%d", *pDelay);
   gsBuf = delaybuf;          gsBufLen = 3;
@@ -422,9 +434,9 @@ int PadPopUp(pMode, pStr, pWide,pHigh, pOpaque, pOmode)
 {
   /* pops up 'Pad' options dialog box */
 
-  int         rv, oldW, oldH, oldO;
-  static int  firsttime=1;
-  static char *labels[] = { "\nOk", "\033Cancel" };
+  int                rv, oldW, oldH, oldO;
+  static int         firsttime=1;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
 
   if (firsttime) {
     padSbuf[0] = '\0';
@@ -527,49 +539,51 @@ static void buildPadLists()
 		padBgDefVals, padBgDefNames, padBgDefLen);
 
   build1PadList("load", padLoadVals, padLoadNames, &padLoadLen,
-		(char **) NULL, (char **) NULL, 0);
+		(const char **) NULL, (const char **) NULL, 0);
 }
 
 
 /***************************************************/
 static void build1PadList(typstr, vals, nams, lenp, dvals, dnams, dlen)
-     char *typstr, **vals, **nams, **dvals, **dnams;
-     int  *lenp, dlen;
+     const char  *typstr;
+     const char **vals, **nams;
+     const char **dvals, **dnams;
+     int         *lenp, dlen;
 {
-  int i;
-  char resname[128];
+  int   i;
+  char  resname[128];
+  char *copy;
 
   for (i=0; i<*lenp; i++) {   /* kill old lists */
-    free(nams[i]);
-    free(vals[i]);
+    free((char *) nams[i]);
+    free((char *) vals[i]);
   }
   *lenp = 0;
 
   for (i=0; i<10; i++) {
     sprintf(resname, "pad.%s.val%d", typstr, i);
     if (rd_str_cl(resname, "Dialog.Menu.Slot",0)) {    /* got one! */
-      vals[*lenp] = (char *) malloc(strlen(def_str)+1);
-      if (!vals[*lenp]) continue;
-      strcpy(vals[*lenp], def_str);
+      copy = strdup(def_str);
+      if (!copy) continue;
+      vals[*lenp] = copy;
 
       sprintf(resname, "pad.%s.name%d", typstr, i);
       if (rd_str_cl(resname, "Dialog.Menu.Slot",0)) {  /* and it has a name! */
-	nams[*lenp] = (char *) malloc(strlen(def_str)+1);
-	if (!nams[*lenp]) { free(vals[*lenp]); continue; }
-	strcpy(nams[*lenp], def_str);
-
+        copy = strdup(def_str);
+	if (!copy) { free((char *) vals[*lenp]); continue; }
       }
       else {  /* it doesn't have a name.  fabricate one */
-	nams[*lenp] = (char *) malloc((size_t) 32);
-	if (!nams[*lenp]) { free(vals[*lenp]); continue; }
-	strncpy(nams[*lenp], vals[*lenp], (size_t) 31);
-	nams[*lenp][31] = '\0';
+	copy = malloc((size_t) 32);
+	if (!copy) { free((char *) vals[*lenp]); continue; }
+	strncpy(copy, vals[*lenp], (size_t) 31);
+	copy[31] = '\0';
       }
+      if (strlen(copy) > (size_t) 20) {   /* fix long names */
+	char *sp = copy + 18;
 
-      if (strlen(nams[*lenp]) > (size_t) 20) {   /* fix long names */
-	char *sp = nams[*lenp] + 18;
 	*sp++ = '.';  *sp++ = '.';  *sp++ = '.';  *sp++ = '\0';
       }
+      nams[*lenp] = copy;
 
       *lenp = (*lenp) + 1;
     }
@@ -578,13 +592,14 @@ static void build1PadList(typstr, vals, nams, lenp, dvals, dnams, dlen)
 
   /* add 'built-in' defaults to the lists */
   for (i=0; i<dlen && *lenp<PAD_MAXDEFLEN; i++) {
-    vals[*lenp] = (char *) malloc(strlen(dvals[i])+1);
-    if (!vals[*lenp]) break;
-    strcpy(vals[*lenp], dvals[i]);
+    copy = strdup(dvals[i]);
+    if (!copy) break;
+    vals[*lenp] = copy;
 
-    nams[*lenp] = (char *) malloc(strlen(dnams[i])+1);
-    if (!nams[*lenp]) { free(vals[*lenp]); break; }
-    strcpy(nams[*lenp], dnams[i]);
+    copy = strdup(dnams[i]);
+    if (!copy) { free((char *) vals[*lenp]); break; }
+    nams[*lenp] = copy;
+
     *lenp = (*lenp) + 1;
   }
 }
@@ -607,7 +622,7 @@ void ClosePopUp()
 
 /***************************************************/
 void OpenAlert(txt)
-     char *txt;
+     const char *txt;
 {
   /* pops up a window with txt displayed in it (*no buttons*).
      returns immediately.  window is closed by 'CloseAlert()'.
@@ -769,14 +784,19 @@ int PUCheckEvent(xev)
 #define TR_MAXLN 10
 
 /***************************************************/
-void TextRect(win, txt, x, y, w, h, fg)
-     Window  win;
-     char   *txt;
-     int     x,y,w,h;
-     u_long  fg;
+static void TextRect(win, txt, x, y, w, h, fg)
+     Window      win;
+     const char *txt;
+     int         x,y,w,h;
+     u_long      fg;
 {
-  char *sp, *ep, *oldep, *start[TR_MAXLN];
-  int   i, inbreak, lineno, top, hardcr, maxln, len[TR_MAXLN];
+  /* draws semi-complex strings in a rectangle */
+
+  const char *sp;
+  const char *ep;
+  const char *oldep;
+  const char *start[TR_MAXLN];
+  int         i, inbreak, lineno, top, hardcr, maxln, len[TR_MAXLN];
 
   XSetForeground(theDisp, theGC, fg);
 
@@ -788,7 +808,7 @@ void TextRect(win, txt, x, y, w, h, fg)
 
     /* drop off any leading spaces (except on first line or after \n) */
     if (sp!=txt && !hardcr) {
-      while(*sp==' ') sp++;
+      while (*sp==' ') sp++;
     }
 
     hardcr = 0;   ep = sp;

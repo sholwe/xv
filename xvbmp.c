@@ -50,7 +50,7 @@ static void  writeBMP1  PARM((FILE *, byte *, int, int));
 static void  writeBMP4  PARM((FILE *, byte *, int, int));
 static void  writeBMP8  PARM((FILE *, byte *, int, int));
 static void  writeBMP24 PARM((FILE *, byte *, int, int));
-static int   bmpError   PARM((char *, char *));
+static int   bmpError   PARM((const char *, const char *));
 
 
 #define FERROR(fp) (ferror(fp) || feof(fp))
@@ -61,14 +61,15 @@ int LoadBMP(fname, pinfo)
      PICINFO *pinfo;
 /*******************************************/
 {
-  FILE    *fp;
-  int     i, c, c1, rv, bPad;
-  u_int   bfSize, bfOffBits, biSize, biWidth, biHeight, biPlanes;
-  u_int   biBitCount, biCompression, biSizeImage, biXPelsPerMeter;
-  u_int   biYPelsPerMeter, biClrUsed, biClrImportant;
-  u_int   colormask[3];
-  char    buf[512], *bname, *cmpstr, rgb_bits[16];
-  byte    *pic24, *pic8;
+  FILE       *fp;
+  int        i, c, c1, rv, bPad;
+  u_int      bfSize, bfOffBits, biSize, biWidth, biHeight, biPlanes;
+  u_int      biBitCount, biCompression, biSizeImage, biXPelsPerMeter;
+  u_int      biYPelsPerMeter, biClrUsed, biClrImportant;
+  u_int      colormask[3];
+  char       buf[512], rgb_bits[16];
+  const char *cmpstr, *bname;
+  byte       *pic24, *pic8;
 
   /* returns '1' on success */
 
@@ -1072,7 +1073,7 @@ static void writeBMP24(fp, pic24, w, h)
 
 /*******************************************/
 static int bmpError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;

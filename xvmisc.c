@@ -21,7 +21,7 @@
  *     void   LoadFishCursors()
  *     void   WaitCursor()
  *     void   SetCursors(int)
- *     char  *BaseName(char *)
+ *     const char  *BaseName(const char *)
  *     void   DrawTempGauge(win, x,y,w,h, percent, fg,bg,hi,lo, str)
  *     void   ProgressMeter(min, max, val, str);
  *     void   xvbcopy(src, dst, length)
@@ -79,9 +79,12 @@ void StoreDeleteWindowProp (win)
 
 /***************************************************/
 Window CreateWindow(name,clname,geom,defw,defh,fg,bg,usesize)
-char         *name, *clname, *geom;
-int           defw,defh,usesize;
-unsigned long fg, bg;
+     const char   *name;
+     const char   *clname;
+     const char   *geom;
+     int           defw,defh;
+     unsigned long fg, bg;
+     int           usesize;
 {
   Window               win;
   XSetWindowAttributes xswa;
@@ -156,7 +159,7 @@ unsigned long fg, bg;
 
   if (clname && strlen(clname)) {
     classh.res_name = "xv";
-    classh.res_class = clname;
+    classh.res_class = (char *) clname;
     StoreDeleteWindowProp(win);
   }
 
@@ -170,9 +173,9 @@ unsigned long fg, bg;
 
 /**************************************************/
 void DrawString(win,x,y,str)
-     Window win;
-     int x,y;
-     char *str;
+     Window      win;
+     int         x,y;
+     const char *str;
 {
   XDrawString(theDisp, win, theGC, x, y, str, (int) strlen(str));
 }
@@ -180,9 +183,9 @@ void DrawString(win,x,y,str)
 
 /**************************************************/
 void CenterString(win,x,y,str)
-     Window win;
-     int x,y;
-     char *str;
+     Window      win;
+     int         x,y;
+     const char *str;
 {
   DrawString(win, CENTERX(mfinfo, x, str), CENTERY(mfinfo, y), str);
 }
@@ -190,9 +193,9 @@ void CenterString(win,x,y,str)
 
 /**************************************************/
 void ULineString(win,x,y,str)
-     Window win;
-     int x,y;
-     char *str;
+     Window      win;
+     int         x,y;
+     const char *str;
 {
   DrawString(win, x, y, str);
   XDrawLine(theDisp, win, theGC, x, y+DESCENT-1,
@@ -202,7 +205,7 @@ void ULineString(win,x,y,str)
 
 /**************************************************/
 int StringWidth(str)
-     char *str;
+     const char *str;
 {
   return(XTextWidth(mfinfo, str, (int) strlen(str)));
 }
@@ -494,7 +497,7 @@ void Warning()
 
 /***********************************/
 void FatalError (identifier)
-      char *identifier;
+      const char *identifier;
 {
   fprintf(stderr, "%s: %s\n",cmd, identifier);
   Quit(-1);
@@ -532,6 +535,10 @@ void Quit(i)
 
 #ifdef HAVE_JPEG
     if (jpegW) XDestroyWindow(theDisp, jpegW);
+#endif
+
+#ifdef HAVE_JP2K
+    if (jp2kW) XDestroyWindow(theDisp, jp2kW);
 #endif
 
 #ifdef HAVE_TIFF
@@ -751,6 +758,10 @@ static void set_cursors(mainc, otherc)
   if (jpegW) XDefineCursor(theDisp, jpegW, otherc);
 #endif
 
+#ifdef HAVE_JP2K
+  if (jp2kW) XDefineCursor(theDisp, jp2kW, otherc);
+#endif 
+
 #ifdef HAVE_TIFF
   if (tiffW) XDefineCursor(theDisp, tiffW, otherc);
 #endif
@@ -778,30 +789,27 @@ static void set_cursors(mainc, otherc)
 
 
 /***************************************************/
-char *BaseName(fname)
-     char *fname;
+const char *BaseName(fname)
+     const char *fname;
 {
-  char *basname;
+  const char *basname;
 
   /* given a complete path name ('/foo/bar/weenie.gif'), returns just the
      'simple' name ('weenie.gif').  Note that it does not make a copy of
      the name, so don't be modifying it... */
 
-  basname = (char *) rindex(fname, '/');
-  if (!basname) basname = fname;
-  else basname++;
-
-  return basname;
+  basname = (const char *) rindex(fname, '/');
+  return basname? basname+1 : fname;
 }
 
 
 /***************************************************/
 void DrawTempGauge(win, x,y,w,h, ratio, fg,bg,hi,lo, str)
-     Window win;
-     int    x,y,w,h;
-     double ratio;
-     u_long fg,bg,hi,lo;
-     char   *str;
+     Window      win;
+     int         x,y,w,h;
+     double      ratio;
+     u_long      fg,bg,hi,lo;
+     const char *str;
 {
   /* draws a 'temprature'-style horizontal progress meter in the specified
      window, at the specified location */
@@ -906,8 +914,8 @@ void DrawTempGauge(win, x,y,w,h, ratio, fg,bg,hi,lo, str)
 
 /***************************************************/
 void ProgressMeter(min, max, val, str)
-     int min, max, val;
-     char *str;
+     int         min, max, val;
+     const char *str;
 {
   /* called during 'long' operations (algorithms, smoothing, etc.) to
      give some indication that the program will ever finish.  Draws a
@@ -983,7 +991,8 @@ void XVCreatedFile(fullname)
 
 /***************************************************/
 void xvbcopy(src, dst, len)
-     char *src, *dst;
+     const char *src;
+     char *dst;
      size_t  len;
 {
   /* Modern OS's (Solaris, etc.) frown upon the use of bcopy(),
@@ -1019,7 +1028,7 @@ void xvbcopy(src, dst, len)
 
 /***************************************************/
 int xvbcmp (s1, s2, len)
-     char   *s1, *s2;
+     const char   *s1, *s2;
      size_t  len;
 {
   for ( ; len>0; len--, s1++, s2++) {
@@ -1043,19 +1052,19 @@ void xv_getwd(buf, buflen)
      char   *buf;
      size_t  buflen;
 {
-  /* gets the current working directory.  No trailing '/' */
+  /* Gets the current working directory and puts it in buf.  No trailing '/'. */
 
-  char *rv;
+  const char *rv;
 
 #ifdef USE_GETCWD
-  rv = (char *) getcwd(buf, buflen);
+  rv = (const char *) getcwd(buf, buflen);
 #else
-  rv = (char *) getwd(buf);
+  rv = (const char *) getwd(buf);
 #endif
 
   if (!rv || strlen(rv)==0) {
-    if (((rv=(char *) getenv("PWD"))==NULL) &&
-	((rv=(char *) getenv("cwd"))==NULL)) rv = "./";
+    if (((rv=(const char *) getenv("PWD"))==NULL) &&
+	((rv=(const char *) getenv("cwd"))==NULL)) rv = "./";
     strcpy(buf, rv);
   }
 #ifdef AUTO_EXPAND
@@ -1081,10 +1090,11 @@ void xv_getwd(buf, buflen)
  */
 
 char *xv_strstr(string, substring)
-     char *string;	        /* String to search. */
-     char *substring;		/* Substring to try to find in string. */
+     const char *string;        /* String to search. */
+     const char *substring;	/* Substring to try to find in string. */
 {
-  register char *a, *b;
+  const char *a;
+  const char *b;
 
   /* First scan quickly through the two strings looking for a
    * single-character match.  When it's found, then compare the
@@ -1092,14 +1102,14 @@ char *xv_strstr(string, substring)
    */
 
   b = substring;
-  if (*b == 0) return string;
+  if (*b == 0) return (char *) string;
 
   for ( ; *string != 0; string += 1) {
     if (*string != *b) continue;
 
     a = string;
     while (1) {
-      if (*b == 0) return string;
+      if (*b == 0) return (char *) string;
       if (*a++ != *b++) break;
     }
     b = substring;
@@ -1113,7 +1123,8 @@ char *xv_strstr(string, substring)
 
 /***************************************************/
 FILE *xv_fopen(fname, mode)
-     char *fname, *mode;
+     const char *fname;
+     const char *mode;
 {
   FILE *fp;
 
@@ -1130,7 +1141,8 @@ FILE *xv_fopen(fname, mode)
 /***************************************************/
 /* GRR 20050320:  added actual mk[s]temp() call... */
 void xv_mktemp(buf, fname)
-     char *buf, *fname;
+     char       *buf;
+     const char *fname;
 {
 #ifndef VMS
   sprintf(buf, "%s/%s", tmpdir, fname);
@@ -1145,70 +1157,71 @@ void xv_mktemp(buf, fname)
 }
 
 
-/*******/
+/***************************************************/
 void Timer(msec)   /* waits for 'n' milliseconds */
- int  msec;
-/*******/
+     int  msec;
 {
   long usec;
 
   if (msec <= 0) return;
+
   usec = (long) msec * 1000;
 
 
-#ifdef VMS
+#ifdef USLEEP
+  usleep(usec);
+  /* return */
+#endif
+
+
+#if defined(VMS) && !defined(USLEEP)
   {
     float ftime;
     ftime = msec / 1000.0;
     lib$wait(&ftime);
-    return;
+    /* return */
   }
 #endif
 
 
-#ifdef sgi
+#if defined(sgi) && !defined(USLEEP)
   {
     float ticks_per_msec;
     long ticks;
     ticks_per_msec = (float) CLK_TCK / 1000.0;
     ticks = (long) ((float) msec * ticks_per_msec);
     sginap(ticks);
-    return;
+    /* return */
   }
 #endif
 
 
-#if defined(SVR4) || defined(sco)
+/* does SGI define SVR4?  not sure... */
+#if (defined(SVR4) || defined(sco)) && !defined(sgi) && !defined(USLEEP)
   {
     struct pollfd dummy;
     poll(&dummy, 0, msec);
-    return;
+    /* return */
   }
 #endif
 
 
-#ifdef USLEEP
-  usleep(usec);  return;
-#endif
-
-
-#ifdef NOTIMER
-  return;
-#endif
-
-
-#ifndef VMS
+#if !defined(USLEEP) && !defined(VMS) && !defined(sgi) && !defined(SVR4) && !defined(sco) && !defined(NOTIMER)
   {
-    /* default Timer() method now uses 'select()', which probably works
-	on all systems *anyhow* (except for VMS...) */
+    /* default/fall-through Timer() method now uses 'select()', which
+     * probably works on all systems *anyhow* (except for VMS...) */
 
     struct timeval time;
 
     time.tv_sec = usec / 1000000L;
     time.tv_usec = usec % 1000000L;
     select(0, XV_FDTYPE NULL, XV_FDTYPE NULL, XV_FDTYPE NULL, &time);
+    /* return */
   }
-#endif /* VMS */
-}
+#endif
 
+
+  /* NOTIMER case, fallthroughs, etc. ... but we return void, so who cares */
+  /* return */
+}
 

@@ -19,6 +19,7 @@
 
 #define NEEDSDIR
 #include "xv.h"
+#include <unistd.h>   /* access() */
 
 #if defined(VMS) || defined(isc)
 typedef unsigned int mode_t;  /* file mode bits */
@@ -39,36 +40,39 @@ typedef unsigned int mode_t;  /* file mode bits */
 #include "bits/br_fifo"
 #include "bits/br_error"
 /* #include "bits/br_unknown"	commented out (near line 492) */
+
 #include "bits/br_cmpres"
 #include "bits/br_bzip2"
 
-#include "bits/br_gif"
-#include "bits/br_pm"
-#include "bits/br_pbm"
-#include "bits/br_xbm"
-#include "bits/br_sunras"
 #include "bits/br_bmp"
-#include "bits/br_utah"
-#include "bits/br_iris"
-#include "bits/br_pcx"
-#include "bits/br_jfif"
-#include "bits/br_tiff"
-#include "bits/br_pds"
-#include "bits/br_ps"
-#include "bits/br_pcd"
-#include "bits/br_iff"
-#include "bits/br_targa"
-#include "bits/br_xpm"
-#include "bits/br_xwd"
 #include "bits/br_fits"
-#include "bits/br_png"
-#include "bits/br_zx"	/* [JCE] The Spectrum+3 icon */
+#include "bits/br_gif"
+#include "bits/br_iff"
+#include "bits/br_iris"
+#include "bits/br_jfif"
+#include "bits/br_jp2"
+#include "bits/br_jpc"
 #include "bits/br_mag"
 #include "bits/br_maki"
-#include "bits/br_pic"
-#include "bits/br_pi"
-#include "bits/br_pic2"
 #include "bits/br_mgcsfx"
+#include "bits/br_pbm"
+#include "bits/br_pcd"
+#include "bits/br_pcx"
+#include "bits/br_pds"
+#include "bits/br_pi"
+#include "bits/br_pic"
+#include "bits/br_pic2"
+#include "bits/br_pm"
+#include "bits/br_png"
+#include "bits/br_ps"
+#include "bits/br_sunras"
+#include "bits/br_targa"
+#include "bits/br_tiff"
+#include "bits/br_utah"
+#include "bits/br_xbm"
+#include "bits/br_xpm"
+#include "bits/br_xwd"
+#include "bits/br_zx"	/* [JCE] The Spectrum+3 icon */
 
 #include "bits/br_trash"
 #include "bits/fcurs"
@@ -104,7 +108,7 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define BF_COMPRESS 21
 #define BF_PS       22
 #define BF_IFF      23
-#define BF_TARGA    24
+#define BF_TGA      24
 #define BF_XPM      25
 #define BF_XWD      26
 #define BF_FITS     27
@@ -112,7 +116,9 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define BF_ZX       29    /* [JCE] Spectrum SCREEN$ */
 #define BF_PCD      30
 #define BF_BZIP2    31
-#define JP_EXT_BF   (BF_BZIP2)
+#define BF_JP2      32
+#define BF_JPC      33
+#define JP_EXT_BF   (BF_JPC)
 #define BF_MAG      (JP_EXT_BF + 1)
 #define BF_MAKI     (JP_EXT_BF + 2)
 #define BF_PIC      (JP_EXT_BF + 3)
@@ -165,30 +171,30 @@ typedef unsigned int mode_t;  /* file mode bits */
 
 #define COUNT(x) (sizeof (x) / sizeof (x)[0])
 
-/* button/menu indicies */
-#define BR_CHDIR    0
-#define BR_DELETE   1
-#define BR_MKDIR    2
-#define BR_RENAME   3
-#define BR_RESCAN   4
-#define BR_UPDATE   5
-#define BR_NEWWIN   6
-#define BR_GENICON  7
-#define BR_SELALL   8
-#define BR_TEXTVIEW 9
-#define BR_RECURSUP 10
-#define BR_QUIT     11
-#define BR_CLOSE    12
-#define BR_NBUTTS   13   /* # of command buttons */
-#define BR_SEP1     13   /* separator */
-#define BR_HIDDEN   14
+/* button/menu indices */
+#define BR_CHDIR      0
+#define BR_DELETE     1
+#define BR_MKDIR      2
+#define BR_RENAME     3
+#define BR_RESCAN     4
+#define BR_UPDATE     5
+#define BR_NEWWIN     6
+#define BR_GENICON    7
+#define BR_SELALL     8
+#define BR_TEXTVIEW   9
+#define BR_RECURSUP   10
+#define BR_QUIT       11
+#define BR_CLOSE      12
+#define BR_NBUTTS     13   /* # of command buttons */
+#define BR_SEP1       13   /* separator */
+#define BR_HIDDEN     14
+#define BR_SELFILES   15
+#define BR_CLIPBRD    16
 #ifdef AUTO_EXPAND
-#define BR_CLEARVD  15
-#define BR_SELFILES 16
-#define BR_NCMDS    17   /* # of menu commands */
+#  define BR_CLEARVD  17
+#  define BR_NCMDS    18   /* # of menu commands */
 #else
-#define BR_SELFILES 15
-#define BR_NCMDS    16   /* # of menu commands */
+#  define BR_NCMDS    17   /* # of menu commands */
 #endif
 
 #define BUTTW 80
@@ -199,29 +205,30 @@ typedef unsigned int mode_t;  /* file mode bits */
 #define DEF_BROWHIGH  (ISPACE_HIGH * INUM_HIGH + BUTTH * 2 + 16 + 28)
 /* last number is a fudge--e.g., extra spaces, borders, etc. -----^  */
 
-static char *showHstr = "Show hidden files";
-static char *hideHstr = "Hide 'hidden' files";
+static const char *showHstr = "Show hidden files";
+static const char *hideHstr = "Hide 'hidden' files";
 
-static char *cmdMList[] = { "Change directory...\t^c",
-		            "Delete file(s)\t^d",
-			    "New directory...\t^n",
-			    "Rename file...\t^r",
-			    "Rescan directory\t^s",
-			    "Update icons\t^u",
-			    "Open new window\t^w",
-			    "Generate icon(s)\t^g",
-			    "Select all files\t^a",
-			    "Text view\t^t",
-			    "Recursive Update\t^e",
-			    "Quit xv\t^q",
-			    "Close window\t^c",
-			    MBSEP,
-			    "Show hidden files",     /* no equiv */
+static const char *cmdMList[] = { "Change directory...\t^c",
+				  "Delete file(s)\t^d",
+				  "New directory...\t^n",
+				  "Rename file...\t^r",
+				  "Rescan directory\t^s",
+				  "Update icons\t^u",
+				  "Open new window\t^w",
+				  "Generate icon(s)\t^g",
+				  "Select all files\t^a",
+				  "Text view\t^t",
+				  "Recursive Update\t^e",
+				  "Quit xv\t^q",
+				  "Close window\t^c",
+				  MBSEP,
+				  "Show hidden files",     /* no equiv */
+				  "Select files...\t^f",
+				  "Clipboard\t^x"
 #ifdef AUTO_EXPAND
-			    "Clear virtual directory",
+				  , "Clear virtual directory"
 #endif
-			    "Select files...\t^f"
-			    };
+				  };
 
 
 #define MAXDEEP 30     /* maximum directory depth */
@@ -239,29 +246,33 @@ typedef struct { char   *name;    /* name of file */
 	       } BFIL;
 
 /* data needed per schnauzer window */
-typedef struct {  Window win, iconW;
-		  int    vis, wasvis;
+typedef struct {  Window        win, iconW;
+		  int           vis, wasvis;
 
-		  int    wide, high;
-		  int    iwWide, iwHigh;
-		  int    numWide, numHigh, visHigh;
+		  int           wide, high;
+		  int           iwWide, iwHigh;
+		  int           numWide, numHigh, visHigh;
 
-		  SCRL   scrl;
-		  BUTT   but[BR_NBUTTS];
-		  MBUTT  dirMB, cmdMB;
-		  char   dispstr[256];
-		  int    numbutshown;
-		  int    showhidden;
+		  SCRL          scrl;
+		  BUTT          but[BR_NBUTTS];
+		  MBUTT         dirMB, cmdMB;
+		  char          dispstr[256];
+		  int           numbutshown;
+		  int           showhidden;
 
-		  int    numlit;
-		  BFIL  *bfList;
-		  int    bfLen;
-		  int    lastIconClicked;
+		  int           numlit;
+		  BFIL         *bfList;
+		  int           bfLen;
+		  int           lastIconClicked;
 		  unsigned long lastClickTime;
 
-		  int    ndirs;
-		  char  *mblist[MAXDEEP];
-		  char   path[MAXPATHLEN+2];   /* '/' terminated */
+		  int           ndirs;
+		  const char   *mblist[MAXDEEP];
+		  char          path[MAXPATHLEN+2];   /* '/' terminated */
+
+		  char         *str;
+		  int           siz, len;
+		  time_t        lst;
 		} BROWINFO;
 
 
@@ -283,7 +294,7 @@ static unsigned long browfg, browbg, browhi, browlo;
 static void closeBrowse      PARM((BROWINFO *));
 static int  brChkEvent       PARM((BROWINFO *, XEvent *));
 static void resizeBrowse     PARM((BROWINFO *, int, int));
-static void setBrowStr       PARM((BROWINFO *, char *));
+static void setBrowStr       PARM((BROWINFO *, const char *));
 static void doCmd            PARM((BROWINFO *, int));
 static void drawBrow         PARM((BROWINFO *));
 static void drawNumfiles     PARM((BROWINFO *));
@@ -318,7 +329,7 @@ static int  bfnamCmp         PARM((const void *, const void *));
 static void rescanDir        PARM((BROWINFO *));
 static int  namcmp           PARM((const void *, const void *));
 static void freeBfList       PARM((BROWINFO *br));
-static char **getDirEntries  PARM((char *, int *, int));
+static char **getDirEntries  PARM((const char *, int *, int));
 static void computeScrlVals  PARM((BROWINFO *, int *, int *));
 static void genSelectedIcons PARM((BROWINFO *));
 static void genIcon          PARM((BROWINFO *, BFIL *));
@@ -341,14 +352,14 @@ static void doDeleteCmd      PARM((BROWINFO *));
 static void doSelFilesCmd    PARM((BROWINFO *));
 
 static void doRecurseCmd     PARM((BROWINFO *));
-static void recurseUpdate    PARM((BROWINFO *, char *));
+static void recurseUpdate    PARM((BROWINFO *, const char *));
 
 static void rm_file          PARM((BROWINFO *, char *));
 static void rm_dir           PARM((BROWINFO *, char *));
 static void rm_dir1          PARM((BROWINFO *));
 
 static void dragFiles        PARM((BROWINFO *, BROWINFO *, char *, char *,
-				   char *, char **, int, int));
+				   const char *, char **, int, int));
 static int  moveFile         PARM((char *, char *));
 static int  copyFile         PARM((char *, char *));
 static void cp               PARM((void));
@@ -368,11 +379,14 @@ static int  selmatch1        PARM((char *, char *));
 static void recIconVisible   PARM((char *, int));
 static void restIconVisible  PARM((BROWINFO *));
 
+static void clipChanges      PARM((BROWINFO *));
+
 
 
 /***************************************************************/
 void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
-     char *geom, *fgstr, *bgstr, *histr, *lostr;
+     const char *geom;
+     const char *fgstr, *bgstr, *histr, *lostr;
 {
   int                   i;
   XSizeHints            hints;
@@ -517,10 +531,12 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
 	     "Text view",browfg,browbg,browhi,browlo);
     BTCreate(&(br->but[BR_RECURSUP]), br->win, 0,0,BUTTW,BUTTH,
 	     "RecursUpd",browfg,browbg,browhi,browlo);
-    BTCreate(&(br->but[BR_QUIT]),  br->win, 0,0,BUTTW,BUTTH,
+    BTCreate(&(br->but[BR_QUIT]), br->win, 0,0,BUTTW,BUTTH,
 	     "Quit xv",browfg,browbg,browhi,browlo);
-    BTCreate(&(br->but[BR_CLOSE]),  br->win, 0,0,BUTTW,BUTTH,
+    BTCreate(&(br->but[BR_CLOSE]), br->win, 0,0,BUTTW,BUTTH,
 	     "Close",browfg,browbg,browhi,browlo);
+    BTCreate(&(br->but[BR_CLIPBRD]), br->win, 0,0,BUTTW,BUTTH,
+	     "Clipboard",browfg,browbg,browhi,browlo);
 
     XMapSubwindows(theDisp, br->win);
 
@@ -560,50 +576,46 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
 
 /* bfIcons[BF_UNKNOWN] = MakePix1(br->win, br_unknown_bits,
                                 br_unknown_width, br_unknown_height); */
-
   bfIcons[BF_UNKNOWN] = bfIcons[BF_FILE];
 
+  bfIcons[BF_COMPRESS] = MakePix1(br->win, br_cmpres_bits,
+				  br_cmpres_width, br_cmpres_height);
+  bfIcons[BF_BZIP2]    = MakePix1(br->win, br_bzip2_bits,
+				  br_bzip2_width, br_bzip2_height);
+
+  bfIcons[BF_BMP] =MakePix1(br->win,br_bmp_bits, br_bmp_width, br_bmp_height);
+  bfIcons[BF_FITS]=MakePix1(br->win,br_fits_bits,br_fits_width,br_fits_height);
   bfIcons[BF_GIF] =MakePix1(br->win,br_gif_bits, br_gif_width, br_gif_height);
-  bfIcons[BF_PM]  =MakePix1(br->win,br_pm_bits,  br_pm_width,  br_pm_height);
+  bfIcons[BF_IFF] =MakePix1(br->win,br_iff_bits, br_iff_width, br_iff_height);
+  bfIcons[BF_IRIS]=MakePix1(br->win,br_iris_bits,br_iris_width,br_iris_height);
+  bfIcons[BF_JFIF]=MakePix1(br->win,br_jfif_bits,br_jfif_width,br_jfif_height);
+  bfIcons[BF_JP2] =MakePix1(br->win,br_jp2_bits, br_jp2_width, br_jp2_height);
+  bfIcons[BF_JPC] =MakePix1(br->win,br_jpc_bits, br_jpc_width, br_jpc_height);
+  bfIcons[BF_MAG] =MakePix1(br->win,br_mag_bits, br_mag_width, br_mag_height);
+  bfIcons[BF_MAKI]=MakePix1(br->win,br_maki_bits,br_maki_width,br_maki_height);
   bfIcons[BF_PBM] =MakePix1(br->win,br_pbm_bits, br_pbm_width, br_pbm_height);
+  bfIcons[BF_PCD] =MakePix1(br->win,br_pcd_bits, br_pcd_width, br_pcd_height);
+  bfIcons[BF_PCX] =MakePix1(br->win,br_pcx_bits, br_pcx_width, br_pcx_height);
+  bfIcons[BF_PDS] =MakePix1(br->win,br_pds_bits, br_pds_width, br_pds_height);
+  bfIcons[BF_PIC2]=MakePix1(br->win,br_pic2_bits,br_pic2_width,br_pic2_height);
+  bfIcons[BF_PIC] =MakePix1(br->win,br_pic_bits, br_pic_width, br_pic_height);
+  bfIcons[BF_PI]  =MakePix1(br->win,br_pi_bits,  br_pi_width,  br_pi_height);
+  bfIcons[BF_PM]  =MakePix1(br->win,br_pm_bits,  br_pm_width,  br_pm_height);
+  bfIcons[BF_PNG] =MakePix1(br->win,br_png_bits, br_png_width, br_png_height);
+  bfIcons[BF_PS]  =MakePix1(br->win,br_ps_bits,  br_ps_width,  br_ps_height);
+  bfIcons[BF_TGA] =MakePix1(br->win,br_tga_bits, br_tga_width, br_tga_height);
+  bfIcons[BF_TIFF]=MakePix1(br->win,br_tiff_bits,br_tiff_width,br_tiff_height);
   bfIcons[BF_XBM] =MakePix1(br->win,br_xbm_bits, br_xbm_width, br_xbm_height);
+  bfIcons[BF_XPM] =MakePix1(br->win,br_xpm_bits, br_xpm_width, br_xpm_height);
+  bfIcons[BF_XWD] =MakePix1(br->win,br_xwd_bits, br_xwd_width, br_xwd_height);
+  bfIcons[BF_ZX]  =MakePix1(br->win,br_zx_bits,  br_zx_width,  br_zx_height);
 
   bfIcons[BF_SUNRAS]  = MakePix1(br->win, br_sunras_bits,
 				 br_sunras_width, br_sunras_height);
-  bfIcons[BF_BMP]     = MakePix1(br->win,br_bmp_bits,
-				 br_bmp_width, br_bmp_height);
   bfIcons[BF_UTAHRLE] = MakePix1(br->win, br_utahrle_bits,
 				 br_utahrle_width, br_utahrle_height);
-
-  bfIcons[BF_IRIS]=MakePix1(br->win,br_iris_bits,br_iris_width,br_iris_height);
-  bfIcons[BF_PCX] =MakePix1(br->win,br_pcx_bits, br_pcx_width, br_pcx_height);
-  bfIcons[BF_JFIF]=MakePix1(br->win,br_jfif_bits,br_jfif_width,br_jfif_height);
-  bfIcons[BF_TIFF]=MakePix1(br->win,br_tiff_bits,br_tiff_width,br_tiff_height);
-  bfIcons[BF_PDS] =MakePix1(br->win,br_pds_bits, br_pds_width, br_pds_height);
-  bfIcons[BF_COMPRESS] = MakePix1(br->win, br_cmpres_bits,
-				  br_cmpres_width, br_cmpres_height);
-  bfIcons[BF_BZIP2] = MakePix1(br->win, br_bzip2_bits,
-			       br_bzip2_width, br_bzip2_height);
-
-  bfIcons[BF_PS]  =MakePix1(br->win,br_ps_bits,  br_ps_width,  br_ps_height);
-  bfIcons[BF_IFF] =MakePix1(br->win,br_iff_bits, br_iff_width, br_iff_height);
-
-  bfIcons[BF_TARGA]   = MakePix1(br->win, br_targa_bits,
-				 br_targa_width, br_targa_height);
-
-  bfIcons[BF_XPM] =MakePix1(br->win,br_xpm_bits, br_xpm_width, br_xpm_height);
-  bfIcons[BF_XWD] =MakePix1(br->win,br_xwd_bits, br_xwd_width, br_xwd_height);
-  bfIcons[BF_FITS]=MakePix1(br->win,br_fits_bits,br_fits_width,br_fits_height);
-  bfIcons[BF_PNG] =MakePix1(br->win,br_png_bits, br_png_width, br_png_height);
-  bfIcons[BF_ZX]  =MakePix1(br->win,br_zx_bits,  br_zx_width,  br_zx_height);
-  bfIcons[BF_PCD] =MakePix1(br->win,br_pcd_bits, br_pcd_width, br_pcd_height);
-  bfIcons[BF_MAG] =MakePix1(br->win,br_mag_bits, br_mag_width, br_mag_height);
-  bfIcons[BF_MAKI]=MakePix1(br->win,br_maki_bits,br_maki_width,br_maki_height);
-  bfIcons[BF_PIC] =MakePix1(br->win,br_pic_bits, br_pic_width, br_pic_height);
-  bfIcons[BF_PI]  =MakePix1(br->win,br_pi_bits,  br_pi_width,  br_pi_height);
-  bfIcons[BF_PIC2]=MakePix1(br->win,br_pic2_bits,br_pic2_width,br_pic2_height);
-  bfIcons[BF_MGCSFX] = MakePix1(br->win,br_mgcsfx_bits,
-                             br_mgcsfx_width,br_mgcsfx_height);
+  bfIcons[BF_MGCSFX]  = MakePix1(br->win, br_mgcsfx_bits,
+				 br_mgcsfx_width, br_mgcsfx_height);
 
 
   /* check that they all got built */
@@ -656,9 +668,10 @@ void CreateBrowse(geom, fgstr, bgstr, histr, lostr)
 void OpenBrowse()
 {
   /* opens up a single browser window */
-  int i;
+
+  int       i;
   BROWINFO *br;
-  char     path[MAXPATHLEN+1];
+  char      path[MAXPATHLEN+1];
 
   /* find next browser to be opened */
   for (i=0; i<MAXBRWIN; i++) {
@@ -821,9 +834,7 @@ static int brChkEvent(br, xev)
   /* checks event to see if it's a browse-window related thing.  If it
      is, it eats the event and returns '1', otherwise '0'. */
 
-  int    rv;
-
-  rv = 1;
+  int rv = 1;
 
   if (!hasBeenSized) return 0;  /* ignore evrythng until we get 1st Resize */
 
@@ -906,19 +917,17 @@ static int brChkEvent(br, xev)
     x = e->x;  y = e->y;
 
 #ifdef VS_RESCMAP
-    if (browCmap && browPerfect && (_IfTempOut!=0))
-      {
-	  XSetWindowAttributes  xswa;
-	  _IfTempOut--;
-	  xswa.colormap = browCmap;
-	  for(i=0;i<MAXBRWIN;i++)
-	    XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
-	  XFlush(theDisp);
-      }
-
+    if (browCmap && browPerfect && (_IfTempOut!=0)) {
+      XSetWindowAttributes  xswa;
+      _IfTempOut--;
+      xswa.colormap = browCmap;
+      for(i=0;i<MAXBRWIN;i++)
+        XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
+      XFlush(theDisp);
+    }
 #endif
 
-  if (e->button == Button1) {
+    if (e->button == Button1) {
       if      (e->window == br->win)      clickBrow(br,x,y);
       else if (e->window == br->scrl.win) SCTrack(&(br->scrl),x,y);
       else if (e->window == br->iconW) {
@@ -1082,7 +1091,7 @@ static void resizeBrowse(br,w,h)
 
 /***************************************************************/
 void SetBrowStr(str)
-     char *str;
+     const char *str;
 {
   /* put string in *all* browse windows */
   int i;
@@ -1095,7 +1104,7 @@ void SetBrowStr(str)
 /***************************************************************/
 static void setBrowStr(br, str)
      BROWINFO *br;
-     char *str;
+     const char *str;
 {
   strncpy(br->dispstr, str, (size_t) 256);
   br->dispstr[255] = '\0';
@@ -1159,7 +1168,7 @@ void BRDeletedFile(name)
   char buf[MAXPATHLEN + 2], *tmp;
 
   strcpy(buf, name);
-  tmp = BaseName(buf);
+  tmp = (char *) BaseName(buf);  /* intentionally losing constness */
   *tmp = '\0';     /* truncate after last '/' */
 
   for (i=0; i<MAXBRWIN; i++) {
@@ -1186,6 +1195,8 @@ static void doCmd(br, cmd)
      BROWINFO *br;
      int cmd;
 {
+  br->lst = 0;
+
   switch (cmd) {
   case BR_CHDIR:   doChdirCmd(br);
                    break;
@@ -1236,14 +1247,15 @@ static void doCmd(br, cmd)
   case BR_CLOSE:    closeBrowse(br);     break;
 
   case BR_HIDDEN:   br->showhidden = !br->showhidden;
-                    br->cmdMB.list[cmd] = (br->showhidden)
-		                              ? hideHstr : showHstr;
+                    br->cmdMB.list[cmd] = br->showhidden ? hideHstr : showHstr;
                     rescanDir(br);
                     break;
 
   case BR_SELFILES: doSelFilesCmd(br);   break;
 
   case BR_RECURSUP: doRecurseCmd(br);    break;
+
+  case BR_CLIPBRD:  clipChanges(br);     break;
 
 #ifdef AUTO_EXPAND
   case BR_CLEARVD:  Vdsettle();          break;
@@ -1407,7 +1419,8 @@ static void changedNumLit(br, sel, nostr)
 
     BTSetActive(&br->but[BR_MKDIR],  0);
     br->cmdMB.dim[BR_MKDIR] = 1;
-  } else {
+  }
+  else {
 #endif
   BTSetActive(&br->but[BR_DELETE],  br->numlit>0);
   br->cmdMB.dim[BR_DELETE] = !(br->numlit>0);
@@ -1596,7 +1609,8 @@ static void drawIcon(br, num)
 {
   int i,x,y,ix,iy,sw,sh,sx,sy;
   BFIL *bf;
-  char  tmpstr[64], *nstr, *str;
+  const char  *nstr, *cstr;
+  char  tmpstr[64];
 #ifdef VMS
   char  fixedname[64];
 #endif
@@ -1641,23 +1655,24 @@ static void drawIcon(br, num)
   }
 
 
-  str = bf->name;
+  cstr = bf->name;
 #ifdef VMS
   if (bf->ftype == BF_DIR) {
+    char  *vstr;
     strcpy(fixedname, bf->name);
-    str = rindex(fixedname, '.');   /* lop off '.DIR' suffix, if any */
-    if (str) *str = '\0';
-    str = fixedname;
+    vstr = rindex(fixedname, '.');   /* lop off '.DIR' suffix, if any */
+    if (vstr) *vstr = '\0';
+    cstr = fixedname;
   }
 #endif /* VMS */
 
-  if (!strcmp(bf->name,"..")) str = "<parent>";
+  if (!strcmp(bf->name,"..")) cstr = "<parent>";
 
 
   /* decide if the title is too big, and shorten if neccesary */
-  if (StringWidth(str) > ISPACE_WIDE-6) {
+  if (StringWidth(cstr) > ISPACE_WIDE-6) {
     int dotpos;
-    strncpy(tmpstr, str, (size_t) 56);
+    strncpy(tmpstr, cstr, (size_t) 56);
     tmpstr[56] = '\0'; /* MR: otherwise it dies on long file names */
     dotpos = strlen(tmpstr);
     strcat(tmpstr,"...");
@@ -1673,7 +1688,7 @@ static void drawIcon(br, num)
 
     nstr = tmpstr;
   }
-  else nstr = str;
+  else nstr = cstr;
 
 
   /* draw the title */
@@ -1912,10 +1927,11 @@ static int clickIconWin(br, mx, my, mtime, multi)
   /* returns '-1' normally, returns an index into bfList[] if the user
      double-clicks an icon */
 
-  int       i,j, sel, cpymode, dodel;
-  BROWINFO *destBr;
-  BFIL     *bf;
-  char      buf[256], *destFolderName;
+  int         i,j, sel, cpymode, dodel;
+  BROWINFO   *destBr;
+  BFIL       *bf;
+  char        buf[256];
+  const char *destFolderName;
 
   if (!br->bfList || !br->bfLen) return -1;
 
@@ -2259,7 +2275,7 @@ static int clickIconWin(br, mx, my, mtime, multi)
        * in a copy command... :(     RLD 26-FEB-1993
        */
 
-      *rindex ( destFolderName, '.' ) = '\0';
+      *rindex ( destFolderName, '.' ) = '\0';  /* FIXME: potentially writing into static strings! */
 #endif
 
 
@@ -2295,6 +2311,8 @@ static void doubleClick(br, sel)
   BFIL *bf;
 
   /* called to 'open' icon #sel, which could be a file or a dir */
+
+  br->lst = 0;
 
   /* if sel == -1, then called via RETURN key.  just use first lit item
      as thing that was double clicked on */
@@ -2369,7 +2387,8 @@ static void doubleClick(br, sel)
 
 	BTSetActive(&br->but[BR_MKDIR],  0);
 	br->cmdMB.dim[BR_MKDIR] = 1;
-      } else {
+      }
+      else {
 	BTSetActive(&br->but[BR_MKDIR],  1);
 	br->cmdMB.dim[BR_MKDIR] = 0;
       }
@@ -2399,24 +2418,21 @@ static void doubleClick(br, sel)
 
 #ifdef VS_RESCMAP
     /* Change Colormap for browser */
-    if (browPerfect && browCmap)
-      {
-	  int i;
-	  XSetWindowAttributes  xswa;
-	  if(LocalCmap)
-	    {
-		xswa.colormap = LocalCmap;
-		_IfTempOut=2;
-	    }
-	  else
-	    {
-		xswa.colormap = theCmap;
-		_IfTempOut=2;
-	    }
-	  for(i=0;i<MAXBRWIN;i++)
-	    XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
-	  XFlush(theDisp);
+    if (browPerfect && browCmap) {
+      int i;
+      XSetWindowAttributes  xswa;
+      if(LocalCmap) {
+	xswa.colormap = LocalCmap;
+	_IfTempOut=2;
       }
+      else {
+	xswa.colormap = theCmap;
+	_IfTempOut=2;
+      }
+      for(i=0;i<MAXBRWIN;i++)
+	XChangeWindowAttributes(theDisp, binfo[i].win, CWColormap, &xswa);
+      XFlush(theDisp);
+    }
 #endif
 
     *event_doneP = 1;     /* make MainLoop load image */
@@ -2514,6 +2530,7 @@ static void keyIconWin(br, kevt)
   case '\021': doCmd(br, BR_QUIT);     break;      /* ^Q = Quit xv */
 
   case '\006': doCmd(br, BR_SELFILES); break;      /* ^F = Select Files */
+  case '\030': doCmd(br, BR_CLIPBRD);  break;      /* ^X = Copy to clipboard */
 
 
   /* case '\003': FakeButtonPress(&but[BCMTVIEW]); break; */    /* ^C */
@@ -2524,6 +2541,9 @@ static void keyIconWin(br, kevt)
   case '\n':   doubleClick(br, -1);   break;      /* RETURN = load selected */
 
   case ' ':
+    if (br->lst && (time(NULL) <= br->lst + incrementalSearchTimeout))
+      goto do_default;
+    /* else fall through... */
   case '\010':
   case '\177':   /* SPACE = load next, BS/DEL = load prev */
     if (br->bfLen && br->numlit >= 1) {
@@ -2612,7 +2632,8 @@ static void keyIconWin(br, kevt)
 
 
   default:  /* unknown character.  Take it as an alpha accelerator */
-    if (buf[0] > 32) browAlpha(br, buf[0]);
+  do_default:  /* (goto-label, not switch-label) */
+    if (buf[0] >= 32) browAlpha(br, buf[0]);
                 else XBell(theDisp, 0);
     break;
   }
@@ -2631,6 +2652,8 @@ static void browKey(br, key)
 
   /* an arrow key (or something like that) was pressed in icon window.
      change selection/scrollbar accordingly */
+
+  br->lst = 0;
 
   /* handle easy keys */
   if (key == CK_PAGEUP)   SCSetVal(&br->scrl, br->scrl.val - br->scrl.page);
@@ -2713,15 +2736,28 @@ static void browAlpha(br, ch)
   /* find first 'plain' file that is lexically >= than the given ch */
 
   int i,j;
+  time_t now = time(NULL);
 
   if (!br->bfLen) return;
-  if (ch <= ' ' || ch > '\177')  return;    /* ignore 'funny' keys */
+  if (ch < ' ' || ch > '\177')  return;    /* ignore 'funny' keys */
 
   for (i=0; i<br->bfLen && br->bfList[i].ftype==BF_DIR; i++);
   if (i==br->bfLen) return;    /* only directories in this dir */
 
+  if (!br->lst || (br->lst + incrementalSearchTimeout < now)) br->len = 0;
+  br->lst = now;
+  
+  if (br->len + 2 > br->siz)
+    if ((br->str = (char *)realloc(br->str, (br->siz = br->len + 32))) == NULL)
+       br->siz = br->len = 0;
+  
+  if (br->len + 2 <= br->siz) {
+    br->str[br->len++] = ch;
+    br->str[br->len] = '\0';
+  }
+
   for ( ; i<br->bfLen; i++) {
-    if (br->bfList[i].name[0] >= ch) break;
+    if (strncmp(br->bfList[i].name, br->str, br->len) >= 0) break;
   }
 
   if (i==br->bfLen) i--;
@@ -2807,7 +2843,8 @@ static void changedBrDirMB(br, sel)
 
 	BTSetActive(&br->but[BR_MKDIR],  0);
 	br->cmdMB.dim[BR_MKDIR] = 1;
-      } else {
+      }
+      else {
 	BTSetActive(&br->but[BR_MKDIR],  1);
 	br->cmdMB.dim[BR_MKDIR] = 0;
       }
@@ -2855,7 +2892,8 @@ static int cdBrow(br)
 
     BTSetActive(&br->but[BR_MKDIR],  0);
     br->cmdMB.dim[BR_MKDIR] = 1;
-  } else {
+  }
+  else {
     BTSetActive(&br->but[BR_MKDIR],  1);
     br->cmdMB.dim[BR_MKDIR] = 0;
   }
@@ -2883,9 +2921,8 @@ static void copyDirInfo(srcbr, dstbr)
   /* copy mblist */
   dstbr->ndirs = srcbr->ndirs;
   for (i=0;  i<dstbr->ndirs;  i++) {
-    dstbr->mblist[i] = (char *) malloc(strlen(srcbr->mblist[i]) + 1);
+    dstbr->mblist[i] = strdup(srcbr->mblist[i]);
     if (!dstbr->mblist[i]) FatalError("unable to malloc brMBlist[]");
-    strcpy(dstbr->mblist[i], srcbr->mblist[i]);
   }
 
 #if 0
@@ -3030,7 +3067,7 @@ static void scanDir(br)
   xv_getwd(path, sizeof(path));
   if (path[strlen(path)-1] != '/') strcat(path,"/");   /* add trailing '/' */
 
-  for (i=0; i<br->ndirs; i++) free(br->mblist[i]);  /* clear old dir names */
+  for (i=0; i<br->ndirs; i++) free((char *) br->mblist[i]);  /* clear old dir names */
 
   /* path will be something like: "/u3/bradley/src/weiner/whatever/" */
 
@@ -3052,14 +3089,16 @@ static void scanDir(br)
 
   /* build brMBlist */
   for (i = br->ndirs-1,j=0; i>=0; i--,j++) {
-    size_t stlen = (i<(br->ndirs-1)) ? dirnames[i+1] - dirnames[i]
+    size_t  stlen = (i<(br->ndirs-1)) ? dirnames[i+1] - dirnames[i]
                                   : strlen(dirnames[i]);
+    char   *copy;
 
-    br->mblist[j] = (char *) malloc(stlen+1);
-    if (!br->mblist[j]) FatalError("unable to malloc brMBlist[]");
+    copy = malloc(stlen+1);
+    if (!copy) FatalError("unable to malloc brMBlist[]");
 
-    strncpy(br->mblist[j], dirnames[i], stlen);
-    br->mblist[j][stlen] = '\0';
+    strncpy(copy, dirnames[i], stlen);
+    copy[stlen] = '\0';
+    br->mblist[j] = copy;
   }
 
 
@@ -3299,7 +3338,7 @@ static void scanFile(br, bf, name)
     case RFT_BZIP2:    bf->ftype = BF_BZIP2;    break;
     case RFT_PS:       bf->ftype = BF_PS;       break;
     case RFT_IFF:      bf->ftype = BF_IFF;      break;
-    case RFT_TARGA:    bf->ftype = BF_TARGA;    break;
+    case RFT_TARGA:    bf->ftype = BF_TGA;      break;
     case RFT_XPM:      bf->ftype = BF_XPM;      break;
     case RFT_XWD:      bf->ftype = BF_XWD;      break;
     case RFT_FITS:     bf->ftype = BF_FITS;     break;
@@ -3555,7 +3594,7 @@ static int namcmp(p1, p2)
 
 /***************************************************************/
 static char **getDirEntries(dir, lenP, dohidden)
-     char *dir;
+     const char *dir;
      int  *lenP;
      int   dohidden;
 {
@@ -3786,7 +3825,8 @@ static void genIcon(br, bf)
         sprintf(str, "Unable to convert '%s' by MgcSfx auto.", bf->name);
         setBrowStr(br, str);
         bf->ftype = BF_ERROR;
-      } else {
+      }
+      else {
         filetype = ReadFileType(tmpname);
         if (strcmp(readname, bf->name)!=0) unlink(readname);
         strncpy(readname, tmpname, sizeof(readname) - 1);
@@ -4234,7 +4274,7 @@ static void makeThumbDir(br)
   if (i) {                      /* failed, let's create it */
     sprintf(thFname, "%s.", br->path);
 #ifdef AUTO_EXPAND
-  Dirtovd(thFname);
+    Dirtovd(thFname);
 #endif
     i = stat(thFname, &st);     /* get permissions of parent dir */
     if (!i) perm = st.st_mode & 07777;
@@ -4243,12 +4283,11 @@ static void makeThumbDir(br)
     sprintf(thFname, "%s%s", br->path, THUMBDIRNAME);
 #ifdef AUTO_EXPAND
     Dirtovd(thFname);
-#  ifdef VIRTUAL_TD
-    if (mkdir(thFname, (mode_t) perm) < 0)
+#endif
+    i = mkdir(thFname, (mode_t) perm);
+#ifdef VIRTUAL_TD
+    if (i < 0)
       Mkvdir_force(thFname);
-#  else
-    mkdir(thFname, (mode_t) perm);
-#  endif
 #endif
   }
 }
@@ -4322,7 +4361,8 @@ static void updateIcons(br)
 		    bf->name, thfname, s1, s2,
 		    (long)filest.st_mtime, (long)thumbst.st_mtime);
 	}
-      } else if (filest.st_ctime > thumbst.st_ctime) {
+      }
+      else if (filest.st_ctime > thumbst.st_ctime) {
         /* update protections */
         chmod(thfname, (mode_t) (filest.st_mode & 07777));
       }
@@ -4437,10 +4477,10 @@ static void doRenameCmd(br)
      pops up a 'what do you want to rename it to' box, and attempts to
      do the trick... */
 
-  int  i, num;
-  char buf[128], txt[256], *origname, txt1[256];
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  struct stat st;
+  int                i, num;
+  char               buf[128], txt[256], *origname, txt1[256];
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  struct stat        st;
 
 #ifdef AUTO_EXPAND
   if (Isvdir(br->path)) {
@@ -4533,10 +4573,10 @@ static void doMkdirCmd(br)
      pops up a 'what do you want to call it' box, and attempts to
      do the trick... */
 
-  int          i;
-  char         buf[128], txt[256];
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  struct stat  st;
+  int                i;
+  char               buf[128], txt[256];
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  struct stat        st;
 
 #ifdef AUTO_EXPAND
   if (Isvdir(br->path)) {
@@ -4593,10 +4633,10 @@ static void doMkdirCmd(br)
 static void doChdirCmd(br)
      BROWINFO *br;
 {
-  int          i;
-  static char  buf[MAXPATHLEN+100];
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char str[512];
+  int                i;
+  static char        buf[MAXPATHLEN+100];
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               str[512];
 
   buf[0] = '\0';
   i = GetStrPopUp("Change to directory:", labels, 2, buf, MAXPATHLEN, " ", 0);
@@ -4635,7 +4675,8 @@ static void doChdirCmd(br)
 
 	BTSetActive(&br->but[BR_MKDIR],  0);
 	br->cmdMB.dim[BR_MKDIR] = 1;
-      } else {
+      }
+      else {
 	BTSetActive(&br->but[BR_MKDIR],  1);
 	br->cmdMB.dim[BR_MKDIR] = 0;
       }
@@ -4662,10 +4703,10 @@ static void doDeleteCmd(br)
    * call 'rm_dir()' for each of the directories
    */
 
-  BFIL  *bf;
-  int    i, numdirs, numfiles, slen, firstdel;
-  char   buf[512];
-  static char *yesno[]  = { "\004Delete", "\033Cancel" };
+  BFIL              *bf;
+  int                i, numdirs, numfiles, slen, firstdel;
+  char               buf[512];
+  static const char *yesno[]  = { "\004Delete", "\033Cancel" };
 
 #ifdef AUTO_EXPAND
   if (Isvdir(br->path)) {
@@ -4816,10 +4857,10 @@ static void doDeleteCmd(br)
 static void doSelFilesCmd(br)
      BROWINFO *br;
 {
-  int          i;
-  static char  buf[MAXPATHLEN+100];
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char str[512];
+  int                i;
+  static char        buf[MAXPATHLEN+100];
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               str[512];
 
   buf[0] = '\0';
   strcpy(str,"Select file name(s).  Wildcard '*' is allowed.  ");
@@ -4857,9 +4898,9 @@ static int   dirStackLen;
 static void doRecurseCmd(br)
      BROWINFO *br;
 {
-  int          i;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         str[512];
+  int                i;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               str[512];
 
   strcpy(str,"Recursive Update:  This could take *quite* a while.\n");
   strcat(str,"Are you sure?");
@@ -4879,8 +4920,8 @@ static void doRecurseCmd(br)
 
 /*******************************************/
 static void recurseUpdate(br, subdir)
-     BROWINFO *br;
-     char     *subdir;
+     BROWINFO   *br;
+     const char *subdir;
 {
   /* note:  'br->path + subdir' is the full path to recurse down from */
 
@@ -5143,9 +5184,10 @@ static int overwrite;
 /*******************************************/
 static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
 		      names, nlen, cpymode)
-     BROWINFO *srcBr, *dstBr;
-     char     *srcpath, *dstpath, *dstdir, **names;
-     int       nlen, cpymode;
+     BROWINFO   *srcBr, *dstBr;
+     char       *srcpath, *dstpath, **names;
+     const char *dstdir;
+     int         nlen, cpymode;
 {
   /* move or copy file(s) and their associated thumbnail files.
      srcpath and dstpath will have trailing '/'s.  dstdir is name of
@@ -5159,6 +5201,10 @@ static void dragFiles(srcBr, dstBr, srcpath, dstpath, dstdir,
   char buf[128];
   struct stat st;
 
+
+  /* if the source directory is read-only, don't move files; copy them */
+  if (!cpymode && (access(srcpath, W_OK) != 0))
+    cpymode = 1;
 
   /* build real destination dir */
   strcpy(dstp, dstpath);
@@ -5381,10 +5427,10 @@ static int moveFile(src,dst)
      One bit of noise:  if destination file exists, pop up a Overwrite?
      warning box.  */
 
-  int         i, srcdir, dstdir;
-  struct stat st;
-  char        buf[512];
-  static char  *owbuts[]  = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
+  int                i, srcdir, dstdir;
+  struct stat        st;
+  char               buf[512];
+  static const char *owbuts[]  = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
 
   if (DEBUG) fprintf(stderr,"moveFile %s %s\n", src, dst);
 
@@ -5492,11 +5538,11 @@ static int copyFile(src,dst)
 	   fall through:  if dest doesn't exist, copy the directory, recurs */
 
 
-  int         dstExists, srcdir, dstdir;
-  struct stat srcSt, dstSt;
-  char        buf[1024];
-  static char *owdiff[] = { "\nOk", "nNo", "\033Cancel" };
-  static char *owsame[] = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
+  int                dstExists, srcdir, dstdir;
+  struct stat        srcSt, dstSt;
+  char               buf[1024];
+  static const char *owdiff[] = { "\nOk", "nNo", "\033Cancel" };
+  static const char *owsame[] = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
 
   if (DEBUG) fprintf(stderr,"copyFile %s %s\n", src, dst);
 
@@ -5800,9 +5846,9 @@ static void cp_file(st, exists)
      int exists;
 /*****************************/
 {
-  register int srcFd, dstFd, rcount, wcount;
-  char         buf[8192];
-  static char  *owbuts[] = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
+  register int       srcFd, dstFd, rcount, wcount;
+  char               buf[8192];
+  static const char *owbuts[] = { "\nOk", "aAlways", "nNo", "NNever", "\033Cancel" };
 
   if (DEBUG) fprintf(stderr,"cp_file:  src='%s',  dst='%s'\n",
 		     cpSrcPath, cpDstPath);
@@ -6091,5 +6137,47 @@ static void restIconVisible(br)
       }
       return;
     }
+  }
+}
+
+
+/*********************************/
+static void clipChanges(br)
+     BROWINFO *br;
+{
+  /* called whenever schnauzer activity should place file names in
+     the X11 clipboard, or change what it put there.
+
+     Implementation is simple because the UI is non-standard
+     (i.e., not like xterm(1)). The clipboard command causes the
+     current browser to dump all its currently selected files'
+     (if any) names to the clipboard, space-separated.
+     No effort is made to shell-escape blanks and other 'odd'
+     characters in the names. */
+
+  char buf[4000]; /* too much or too little, whatever... */
+  int n;
+  int i;
+
+  n = 0;
+  strcpy(buf, "");
+
+  for (i=0; i<br->bfLen; i++) {
+    if(br->bfList[i].lit == 1) {
+      int m;
+
+      m = strlen(br->bfList[i].name) + 1;
+
+      if(n+m+1 >= sizeof(buf)) return;  /* names probably won't fit in buf, abort */
+      strcat(buf, br->bfList[i].name);
+      strcat(buf, " ");
+      n += m;
+    }
+  }
+
+  if(n) {
+    buf[n-1] = 0; /* trim last space */
+
+    NewCutBuffer(buf);
   }
 }

@@ -27,9 +27,8 @@ typedef	unsigned long uint32;	/* sizeof (uint32) must == 4 */
 #endif
 
 #define MUST(a)	            if (!(a)) {\
-				return fail(st_fname, st_err);\
 				close(fd); \
-			    }
+				return fail(st_fname, st_err); }
 #define READU8(fd,u)	    if ((read(fd, &u, 1)<1)) {\
 				myfree(); \
 				close(fd); \
@@ -48,26 +47,29 @@ typedef	unsigned long uint32;	/* sizeof (uint32) must == 4 */
 	return 0;		\
     }
 
-static char * err_ueof = "Unexpected EOF";
-static char * err_unst = "Unsupported image type";
-static char * err_extf = "Extensions are forbidden";
-static char * err_inmb = "Invalid multibyte integer";
+static const char err_ueof[] = "Unexpected EOF";
+static const char err_unst[] = "Unsupported image type";
+static const char err_extf[] = "Extensions are forbidden";
+static const char err_inmb[] = "Invalid multibyte integer";
 
-static char * st_fname;
-static char * st_err;
+static const char *st_fname;
+static const char *st_err;
 
-static int fail	    PARM((char *, char *));
-static int read_mb  PARM((int *, int));
-static void write_mb PARM((uint32, FILE *));
-static int read_ext PARM((int, uint8));
-static void * mymalloc PARM((int));
-static void myfree   PARM((void));
-static uint8 * render1 PARM((uint8 *, int, int));
+static int    fail	PARM((const char *, const char *));
+static int    read_mb	PARM((int *, int));
+static void   write_mb	PARM((uint32, FILE *));
+static int    read_ext	PARM((int, uint8));
+static void  *mymalloc	PARM((int));
+static void   myfree	PARM((void));
+static uint8 *render1	PARM((uint8 *, int, int));
 
-void ** mymem = NULL;
-int mymems = 0;
+static void **mymem = NULL;
+static int    mymems = 0;
 
-int LoadWBMP(char * fname, PICINFO * pinfo)
+
+int LoadWBMP(fname, pinfo)
+     char *fname;
+     PICINFO *pinfo;
 {
     int fd;
     int im_type;	/* image type (only type 0 supported) */
@@ -139,9 +141,13 @@ int LoadWBMP(char * fname, PICINFO * pinfo)
     return 1;
 }
 
-int WriteWBMP(FILE * fp, byte * pic, int ptype, int w, int h,
-	byte * rmap, byte *gmap, byte *bmap,
-	int numcols, int colorstyle)
+
+int WriteWBMP(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle)
+     FILE *fp;
+     byte *pic;
+     int ptype, w, h;
+     byte *rmap, *gmap, *bmap;
+     int numcols, colorstyle;
 {
     int count = 0;
     uint8 bit = 0;
@@ -169,13 +175,18 @@ int WriteWBMP(FILE * fp, byte * pic, int ptype, int w, int h,
     return 0;
 }
 
-int fail(char * name, char * msg)
+
+static int fail(name, msg)
+     const char *name, *msg;
 {
     SetISTR(ISTR_WARNING, "%s : %s", name, msg);
     return 0;
 }
 
-void write_mb(uint32 data, FILE * f)
+
+static void write_mb(data, f)
+     uint32 data;
+     FILE *f;
 {
     int i = 32;
     uint32 aux = data;
@@ -207,7 +218,9 @@ void write_mb(uint32 data, FILE * f)
 
 }
 
-int read_mb(int * dst, int fd)
+
+static int read_mb(dst, fd)
+     int *dst, fd;
 {
     int ac = 0;
     int ct = 0;
@@ -231,7 +244,10 @@ int read_mb(int * dst, int fd)
     return 1;
 }
 
-int read_ext(int fd, uint8 fixed)
+
+static int read_ext(fd, fixed)
+     int fd;
+     uint8 fixed;
 {
     if (!(fixed&0x7f)) {    /* no extensions */
 	return 1;
@@ -269,15 +285,18 @@ int read_ext(int fd, uint8 fixed)
     */
 }
 
-void * mymalloc(int l)
+
+static void *mymalloc(numbytes)
+     int numbytes;
 {
     mymem = (void**)realloc(mymem, mymems+1);
     if (!mymem)
 	FatalError("LoadWBMP: can't realloc buffer");
-    return (mymem[mymems++] = malloc(l));
+    return (mymem[mymems++] = malloc(numbytes));
 }
 
-void myfree()
+
+static void myfree()
 {
     int i;
 
@@ -292,7 +311,10 @@ void myfree()
     mymems = 0;
 }
 
-uint8 * render1(uint8 * data, int size, int npixels)
+
+static uint8 *render1(data, size, npixels)
+     uint8 *data;
+     int size, npixels;
 {
     byte * pic;
     int i;

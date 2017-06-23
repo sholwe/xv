@@ -2221,8 +2221,8 @@ static int keyinMSD(c)
 /*******************************************/
 int getInputCom()
 {
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  int i;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  int                i;
 
   strcpy(input_command_ex, MGCSFX_DEFAULT_INPUT_COMMAND);
   i = GetStrPopUp("Input External Command (Input is PNM):", labels, 2,
@@ -2238,8 +2238,8 @@ int getInputCom()
 
 int getOutputCom()
 {
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  int i;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  int                i;
 
   strcpy(output_command_ex, MGCSFX_DEFAULT_OUTPUT_COMMAND);
   i = GetStrPopUp("Input External Command (Output is PNM_RAW):", labels, 2,

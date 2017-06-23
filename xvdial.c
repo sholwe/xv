@@ -52,12 +52,12 @@ static void   dimDial         PARM((DIAL *));
 /***************************************************/
 void DCreate(dp, parent, x, y, w, h, minv, maxv, curv, inc, page,
 	          fg, bg, hi, lo, title, units)
-DIAL         *dp;
-Window        parent;
-int           x,y,w,h;
-double        minv,maxv,curv,inc,page;
-unsigned long fg,bg,hi,lo;
-char         *title, *units;
+DIAL          *dp;
+Window         parent;
+int            x, y, w, h;
+double         minv, maxv, curv, inc, page;
+unsigned long  fg, bg, hi, lo;
+const char    *title, *units;
 {
 
   if (!pixmaps_built) {
@@ -71,22 +71,23 @@ char         *title, *units;
 	        (char *) dial_ccw2_bits, PW, PH, fg, bg, dispDEEP);
   }
 
-  dp->x     = x;
-  dp->y     = y;
-
-  dp->w     = w;
-  dp->h     = h;
-  dp->fg    = fg;
-  dp->bg    = bg;
-  dp->hi    = hi;
-  dp->lo    = lo;
-  dp->title = title;
-  dp->units = units;
-  dp->active = 1;
+  dp->x       = x;
+  dp->y       = y;
+  dp->w       = w;
+  dp->h       = h;
+  dp->fg      = fg;
+  dp->bg      = bg;
+  dp->hi      = hi;
+  dp->lo      = lo;
+  dp->title   = title;
+  dp->units   = units;
+  dp->active  = 1;
   dp->drawobj = NULL;
 
-  if (w < h-24-16) dp->rad = (w - 8) / 2;
-           else dp->rad = (h - 24 - 16 - 8) / 2;
+  if (w < h-24-16)
+    dp->rad = (w - 8) / 2;
+  else
+    dp->rad = (h - 24 - 16 - 8) / 2;
   dp->cx = w / 2;
   dp->cy = dp->rad + 4 + 16;
 
@@ -95,8 +96,8 @@ char         *title, *units;
   dp->bx[INCW1]  = w-14-4;  dp->by[INCW1]  = h - 4 - 20;
   dp->bx[INCW2]  = w-14-4;  dp->by[INCW2]  = h - 4 - 10;
 
-  dp->win = XCreateSimpleWindow(theDisp, parent,x,y,(u_int) w,(u_int) h,
-				1,fg,bg);
+  dp->win = XCreateSimpleWindow(theDisp, parent, x, y, (u_int) w, (u_int) h,
+				1, fg, bg);
   if (!dp->win) FatalError("can't create dial window");
 
   DSetRange(dp, minv, maxv, curv, inc, page);

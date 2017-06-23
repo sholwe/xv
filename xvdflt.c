@@ -62,7 +62,7 @@ void LoadDfltPic(pinfo)
   for (i=0; i<XVDFLT_HIGH; i++) {
     nbytes = 0;
     while (nbytes < XVDFLT_WIDE) {
-      char *sp;
+      const char *sp;
       byte *dp;
 
       j = XVDFLT_WIDE - nbytes;
@@ -136,7 +136,11 @@ void LoadDfltPic(pinfo)
   pinfo->w       = XVDFLT_WIDE;
   pinfo->h       = XVDFLT_HIGH;
   pinfo->type    = PIC8;
+#ifdef HAVE_PNG
+  pinfo->frmType = F_PNG;
+#else
   pinfo->frmType = F_GIF;
+#endif
   pinfo->colType = F_FULLCOLOR;
 
   pinfo->normw   = pinfo->w;
@@ -240,7 +244,11 @@ static void loadOldDfltPic(pinfo)
   pinfo->w       = DWIDE;
   pinfo->h       = DHIGH;
   pinfo->type    = PIC8;
+#ifdef HAVE_PNG
+  pinfo->frmType = F_PNG;
+#else
   pinfo->frmType = F_GIF;
+#endif
   pinfo->colType = F_FULLCOLOR;
 
   sprintf(pinfo->fullInfo, "<8-bit internal>");
@@ -272,7 +280,7 @@ void xbm2pic(bits, bwide, bhigh, pic, pwide, phigh, cx, cy, col)
       x = cx - bwide/2;
 
       k = *bptr;
-      for (j=0,bit=0; j<bwide; j++, bit = (++bit)&7, x++) {
+      for (j=0,bit=0; j<bwide; j++, bit = (bit+1)&7, x++) {
 	if (!bit) k = *bptr++;
 	if ( (k&1) && (x>=0) && (x<pwide))
 	  pptr[x] = col;

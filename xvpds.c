@@ -263,7 +263,7 @@ int LoadPDS(fname, pinfo)
              recsize,hrecsize,irecsize,isimage,labelrecs,labelsofar,
              w,h,lpsize,lssize,samplesize,returnp,labelsize,yy;
   char	*tmp;
-  char  *ftypstr;
+  const char   *ftypstr;
   unsigned long filesize;
   char  sampletype[64];
 

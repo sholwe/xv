@@ -612,8 +612,8 @@ static void allocRWColors()
        colors into closest allocated desired colors */
 
       if (nfcols==0 && !LocalCmap) {
-	char tstr[128], *tmp,
-	    *foo = "No r/w cells available.  Using r/o color.";
+	char tstr[128], *tmp;
+	const char *foo = "No r/w cells available.  Using r/o color.";
 
 	tmp = GetISTR(ISTR_WARNING);
 	if (strlen(tmp) > (size_t) 0) sprintf(tstr, "%s  %s", tmp, foo);

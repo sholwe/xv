@@ -5,7 +5,7 @@
  */
 
 #ifndef va_start
-# define NEEDSARGS
+#  define NEEDSARGS
 #endif
 
 #include "xv.h"
@@ -52,9 +52,10 @@ static void  _TIFFwarn   PARM((const char *, const char *, va_list));
 
 static long  filesize;
 static byte *rmap, *gmap, *bmap;
-static char *filename;
+static const char *filename;
 
 static int   error_occurred;
+
 
 /*******************************************/
 int LoadTIFF(fname, pinfo, quick)
@@ -106,7 +107,7 @@ int LoadTIFF(fname, pinfo, quick)
   if (fname[0] == '/') {
     xv_getwd(oldpath, sizeof(oldpath));
     strcpy(tmppath, fname);
-    sp = BaseName(tmppath);
+    sp = (char *) BaseName(tmppath);  /* intentionally losing constness */
     if (sp != tmppath) {
       sp[-1] = '\0';     /* truncate before last '/' char */
       if (chdir(tmppath)) {
@@ -123,9 +124,9 @@ int LoadTIFF(fname, pinfo, quick)
     /* see if there's more than 1 image in tiff file, to determine if we
        should do multi-page thing... */
 
-    tif = TIFFOpen(filename,"r");
+    tif = TIFFOpen(filename, "r");
     if (!tif) return 0;
-    while (TIFFReadDirectory(tif)) nump++;
+    while (TIFFReadDirectory(tif)) ++nump;
     TIFFClose(tif);
     if (DEBUG)
       fprintf(stderr,"LoadTIFF: %d page%s found\n", nump, nump==1 ? "" : "s");
@@ -134,19 +135,22 @@ int LoadTIFF(fname, pinfo, quick)
     /* if there are multiple images, copy them out to multiple tmp files,
        and load the first one... */
 
-    /* GRR 20050320:  converted this fake mktemp() to use mktemp()/mkstemp()
-       internally (formerly it simply prepended tmpdir to the string and
-       returned immediately) */
-    xv_mktemp(tmpname, "xvpgXXXXXX");
-
-    if (tmpname[0] == '\0') {   /* mktemp() or mkstemp() blew up */
-      sprintf(str,"LoadTIFF: Unable to create temporary filename???");
-      ErrPopUp(str, "\nHow unlikely!");
-      return 0;
-    }
-
     if (nump>1) {
       TIFF *in;
+
+      /* GRR 20050320:  converted this fake mktemp() to use mktemp()/mkstemp()
+         internally (formerly it simply prepended tmpdir to the string and
+         returned immediately) */
+      xv_mktemp(tmpname, "xvpgXXXXXX");
+
+      if (tmpname[0] == '\0') {   /* mktemp() or mkstemp() blew up */
+        sprintf(dummystr,"LoadTIFF: Unable to create temporary filename???");
+        ErrPopUp(dummystr, "\nHow unlikely!");
+        return 0;
+      }
+
+      /* GRR 20070506:  could clean up unappended tmpname-file here (Linux
+         bug?), but "cleaner" (more general) to do so in KillPageFiles() */
 
       in = TIFFOpen(filename, "r");
       if (!in) return 0;
@@ -159,17 +163,18 @@ int LoadTIFF(fname, pinfo, quick)
 
 	if (!TIFFReadDirectory(in)) break;
       }
+      TIFFClose(in);
       if (DEBUG)
 	fprintf(stderr,"LoadTIFF: %d page%s written\n",
 		i-1, (i-1)==1 ? "" : "s");
 
-      sprintf(tmp, "%s%d", tmpname, 1);           /* open page #1 */
+      sprintf(tmp, "%s%d", tmpname, 1);           /* start with page #1 */
       filename = tmp;
     }
   }  /* if (!quick) ... */
 
 
-  tif = TIFFOpen(filename,"r");
+  tif = TIFFOpen(filename, "r");
   if (!tif) return 0;
 
   /* flip orientation so that image comes in X order */
@@ -281,7 +286,7 @@ static int copyTiff(in, fname)
   TIFF   *out;
   short   bitspersample, samplesperpixel, shortv, *shortav;
   uint32  w, l;
-  float   floatv;
+  float   floatv, *floatav;
   char   *stringv;
   uint32  longv;
   uint16 *red, *green, *blue, shortv2;
@@ -290,44 +295,54 @@ static int copyTiff(in, fname)
   out = TIFFOpen(fname, "w");
   if (!out) return 0;
 
-  CopyField (TIFFTAG_SUBFILETYPE,     longv);
-  CopyField (TIFFTAG_TILEWIDTH,       w);
-  CopyField (TIFFTAG_TILELENGTH,      l);
-  CopyField (TIFFTAG_IMAGEWIDTH,      w);
-  CopyField (TIFFTAG_IMAGELENGTH,     l);
-  CopyField (TIFFTAG_BITSPERSAMPLE,   bitspersample);
-  CopyField (TIFFTAG_COMPRESSION,     shortv);
-  CopyField (TIFFTAG_PREDICTOR,       shortv);
-  CopyField (TIFFTAG_PHOTOMETRIC,     shortv);
-  CopyField (TIFFTAG_THRESHHOLDING,   shortv);
-  CopyField (TIFFTAG_FILLORDER,       shortv);
-  CopyField (TIFFTAG_ORIENTATION,     shortv);
-  CopyField (TIFFTAG_SAMPLESPERPIXEL, samplesperpixel);
-  CopyField (TIFFTAG_MINSAMPLEVALUE,  shortv);
-  CopyField (TIFFTAG_MAXSAMPLEVALUE,  shortv);
-  CopyField (TIFFTAG_XRESOLUTION,     floatv);
-  CopyField (TIFFTAG_YRESOLUTION,     floatv);
-  CopyField (TIFFTAG_GROUP3OPTIONS,   longv);
-  CopyField (TIFFTAG_GROUP4OPTIONS,   longv);
-  CopyField (TIFFTAG_RESOLUTIONUNIT,  shortv);
-  CopyField (TIFFTAG_PLANARCONFIG,    shortv);
-  CopyField (TIFFTAG_ROWSPERSTRIP,    longv);
-  CopyField (TIFFTAG_XPOSITION,       floatv);
-  CopyField (TIFFTAG_YPOSITION,       floatv);
-  CopyField (TIFFTAG_IMAGEDEPTH,      longv);
-  CopyField (TIFFTAG_TILEDEPTH,       longv);
-  CopyField2(TIFFTAG_EXTRASAMPLES,    shortv, shortav);
-  CopyField3(TIFFTAG_COLORMAP,        red, green, blue);
-  CopyField2(TIFFTAG_PAGENUMBER,      shortv, shortv2);
-  CopyField (TIFFTAG_ARTIST,          stringv);
-  CopyField (TIFFTAG_IMAGEDESCRIPTION,stringv);
-  CopyField (TIFFTAG_MAKE,            stringv);
-  CopyField (TIFFTAG_MODEL,           stringv);
-  CopyField (TIFFTAG_SOFTWARE,        stringv);
-  CopyField (TIFFTAG_DATETIME,        stringv);
-  CopyField (TIFFTAG_HOSTCOMPUTER,    stringv);
-  CopyField (TIFFTAG_PAGENAME,        stringv);
-  CopyField (TIFFTAG_DOCUMENTNAME,    stringv);
+  if (TIFFGetField(in, TIFFTAG_COMPRESSION, &shortv)){
+    /* Currently, the TIFF Library cannot correctly copy TIFF version 6.0 (or
+     * earlier) files that use "old" JPEG compression, so don't even try. */
+    if (shortv == COMPRESSION_OJPEG) return 0;
+    TIFFSetField(out, TIFFTAG_COMPRESSION, shortv);
+  }
+  CopyField (TIFFTAG_SUBFILETYPE,         longv);
+  CopyField (TIFFTAG_TILEWIDTH,           w);
+  CopyField (TIFFTAG_TILELENGTH,          l);
+  CopyField (TIFFTAG_IMAGEWIDTH,          w);
+  CopyField (TIFFTAG_IMAGELENGTH,         l);
+  CopyField (TIFFTAG_BITSPERSAMPLE,       bitspersample);
+  CopyField (TIFFTAG_PREDICTOR,           shortv);
+  CopyField (TIFFTAG_PHOTOMETRIC,         shortv);
+  CopyField (TIFFTAG_THRESHHOLDING,       shortv);
+  CopyField (TIFFTAG_FILLORDER,           shortv);
+  CopyField (TIFFTAG_ORIENTATION,         shortv);
+  CopyField (TIFFTAG_SAMPLESPERPIXEL,     samplesperpixel);
+  CopyField (TIFFTAG_MINSAMPLEVALUE,      shortv);
+  CopyField (TIFFTAG_MAXSAMPLEVALUE,      shortv);
+  CopyField (TIFFTAG_XRESOLUTION,         floatv);
+  CopyField (TIFFTAG_YRESOLUTION,         floatv);
+  CopyField (TIFFTAG_GROUP3OPTIONS,       longv);
+  CopyField (TIFFTAG_GROUP4OPTIONS,       longv);
+  CopyField (TIFFTAG_RESOLUTIONUNIT,      shortv);
+  CopyField (TIFFTAG_PLANARCONFIG,        shortv);
+  CopyField (TIFFTAG_ROWSPERSTRIP,        longv);
+  CopyField (TIFFTAG_XPOSITION,           floatv);
+  CopyField (TIFFTAG_YPOSITION,           floatv);
+  CopyField (TIFFTAG_IMAGEDEPTH,          longv);
+  CopyField (TIFFTAG_TILEDEPTH,           longv);
+  CopyField2(TIFFTAG_EXTRASAMPLES,        shortv, shortav);
+  CopyField3(TIFFTAG_COLORMAP,            red, green, blue);
+  CopyField2(TIFFTAG_PAGENUMBER,          shortv, shortv2);
+  CopyField (TIFFTAG_ARTIST,              stringv);
+  CopyField (TIFFTAG_IMAGEDESCRIPTION,    stringv);
+  CopyField (TIFFTAG_MAKE,                stringv);
+  CopyField (TIFFTAG_MODEL,               stringv);
+  CopyField (TIFFTAG_SOFTWARE,            stringv);
+  CopyField (TIFFTAG_DATETIME,            stringv);
+  CopyField (TIFFTAG_HOSTCOMPUTER,        stringv);
+  CopyField (TIFFTAG_PAGENAME,            stringv);
+  CopyField (TIFFTAG_DOCUMENTNAME,        stringv);
+  CopyField2(TIFFTAG_JPEGTABLES,          longv, stringv);
+  CopyField (TIFFTAG_YCBCRCOEFFICIENTS,   floatav);
+  CopyField2(TIFFTAG_YCBCRSUBSAMPLING,    shortv,shortv2);
+  CopyField (TIFFTAG_YCBCRPOSITIONING,    shortv);
+  CopyField (TIFFTAG_REFERENCEBLACKWHITE, floatav);
 
   if (TIFFIsTiled(in)) rv = cpTiles (in, out);
                   else rv = cpStrips(in, out);
@@ -564,7 +579,7 @@ static	float   *refBlackWhite;
 static	byte **BWmap;
 static	byte **PALmap;
 
-/* XXXX Work around some collisions with the new library. */
+/* XXX Work around some collisions with the new library. */
 #define tileContigRoutine _tileContigRoutine
 #define tileSeparateRoutine _tileSeparateRoutine
 
@@ -625,13 +640,29 @@ static void   putRGBseparate16bittile  PARM((byte *, u_short *, u_short *,
 					    uint32, uint32, int, int));
 
 
-static void   initYCbCrConversion     PARM((void));
+static void   initYCbCrConversion      PARM((void));
 
-static void   putRGBContigYCbCrClump  PARM((byte *, u_char *, int, int,
-					    uint32, int, int, int));
+static void   putRGBContigYCbCrClump   PARM((byte *, u_char *, int, int,
+					     uint32, int, int, int));
 
-static void   putcontig8bitYCbCrtile  PARM((byte *, u_char *, RGBvalue *,
-					  uint32, uint32, int, int));
+static void   putRGBSeparateYCbCrClump PARM((byte *, u_char *, u_char *,
+					     u_char *, int, int, uint32, int,
+					     int, int));
+  
+static void   putRGBSeparate16bitYCbCrClump PARM((byte *, u_short *, u_short *,
+						  u_short *, int, int, uint32,
+						  int, int, int));
+
+static void   putcontig8bitYCbCrtile   PARM((byte *, u_char *, RGBvalue *,
+					     uint32, uint32, int, int));
+
+static void   putYCbCrseparate8bittile PARM((byte *, u_char *, u_char *, 
+					     u_char *, RGBvalue *, 
+					     uint32, uint32, int, int));
+
+static void   putYCbCrseparate16bittile PARM((byte *, u_short *, u_short *, 
+					      u_short *, RGBvalue *, 
+					      uint32, uint32, int, int));
 
 static tileContigRoutine   pickTileContigCase   PARM((RGBvalue *));
 static tileSeparateRoutine pickTileSeparateCase PARM((RGBvalue *));
@@ -729,24 +760,67 @@ static int gt(tif, w, h, raster)
      uint32 w, h;
      byte   *raster;
 {
+#ifdef USE_LIBJPEG_FOR_TIFF_YCbCr_RGB_CONVERSION
+  u_short compression;
+#endif
   u_short minsamplevalue, maxsamplevalue, planarconfig;
   RGBvalue *Map;
   int bpp = 1, e;
   int x, range;
 
+#ifdef USE_LIBJPEG_FOR_TIFF_YCbCr_RGB_CONVERSION
+  TIFFGetField(tif, TIFFTAG_COMPRESSION, &compression);
+#endif
+  TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &planarconfig);
   TIFFGetFieldDefaulted(tif, TIFFTAG_MINSAMPLEVALUE, &minsamplevalue);
   TIFFGetFieldDefaulted(tif, TIFFTAG_MAXSAMPLEVALUE, &maxsamplevalue);
   Map = NULL;
 
   switch (photometric) {
   case PHOTOMETRIC_YCBCR:
-    TIFFGetFieldDefaulted(tif, TIFFTAG_YCBCRCOEFFICIENTS,
-			  &YCbCrCoeffs);
-    TIFFGetFieldDefaulted(tif, TIFFTAG_YCBCRSUBSAMPLING,
-			  &YCbCrHorizSampling, &YCbCrVertSampling);
-    TIFFGetFieldDefaulted(tif, TIFFTAG_REFERENCEBLACKWHITE,
-			  &refBlackWhite);
-    initYCbCrConversion();
+#ifdef USE_LIBJPEG_FOR_TIFF_YCbCr_RGB_CONVERSION
+    if (compression == COMPRESSION_JPEG
+#ifdef LIBTIFF_HAS_OLDJPEG_SUPPORT
+                                        || compression == COMPRESSION_OJPEG
+#endif
+                                                                            ) {
+      /* FIXME:  Remove the following test as soon as TIFF Library is fixed!
+       *   (Currently [June 2002] this requires supporting patches in both
+       *   tif_ojpeg.c and tif_jpeg.c in order to support subsampled YCbCr
+       *   images having separated color planes.) */
+      if (planarconfig == PLANARCONFIG_CONTIG) {
+        /* can rely on libjpeg to convert to RGB (assuming newer libtiff,
+         * compiled with appropriate forms of JPEG support) */
+        TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
+        photometric = PHOTOMETRIC_RGB;
+      } else {
+        TIFFError(filename, "Cannot handle format");
+        return (0);
+      }
+    } else
+#endif // USE_LIBJPEG_FOR_TIFF_YCbCr_RGB_CONVERSION
+    {
+      TIFFGetFieldDefaulted(tif, TIFFTAG_YCBCRCOEFFICIENTS, &YCbCrCoeffs);
+      TIFFGetFieldDefaulted(tif, TIFFTAG_YCBCRSUBSAMPLING,
+			    &YCbCrHorizSampling, &YCbCrVertSampling);
+
+      /* According to the TIFF specification, if no "ReferenceBlackWhite"
+       * tag is present in the input file, "TIFFGetFieldDefaulted()" returns
+       * default reference black and white levels suitable for PHOTOMETRIC_RGB;
+       * namely:  <0,255,0,255,0,255>.  But for PHOTOMETRIC_YCBCR in JPEG
+       * images, the usual default (e.g., corresponding to the behavior of the
+       * IJG libjpeg) is:  <0,255,128,255,128,255>.  Since libtiff doesn't have
+       * a clean, standard interface for making this repair, the following
+       * slightly dirty code installs the default.  --Scott Marovich,
+       * Hewlett-Packard Labs, 9/2001.
+       */
+      if (!TIFFGetField(tif, TIFFTAG_REFERENCEBLACKWHITE, &refBlackWhite)) {
+        TIFFGetFieldDefaulted(tif, TIFFTAG_REFERENCEBLACKWHITE, &refBlackWhite);
+        refBlackWhite[4] = refBlackWhite[2] = 1 << (bitspersample - 1);
+      }
+      TIFFGetFieldDefaulted(tif, TIFFTAG_REFERENCEBLACKWHITE, &refBlackWhite);
+      initYCbCrConversion();
+    }
     /* fall thru... */
 
   case PHOTOMETRIC_RGB:
@@ -760,8 +834,7 @@ static int gt(tif, w, h, raster)
     range = maxsamplevalue - minsamplevalue;
     Map = (RGBvalue *)malloc((range + 1) * sizeof (RGBvalue));
     if (Map == NULL) {
-      TIFFError(filename,
-		"No space for photometric conversion table");
+      TIFFError(filename, "No space for photometric conversion table");
       return (0);
     }
 
@@ -796,8 +869,7 @@ static int gt(tif, w, h, raster)
   case PHOTOMETRIC_PALETTE:
     if (!TIFFGetField(tif, TIFFTAG_COLORMAP,
 		      &redcmap, &greencmap, &bluecmap)) {
-      TIFFError(filename,
-		"Missing required \"Colormap\" tag");
+      TIFFError(filename, "Missing required \"Colormap\" tag");
       return (0);
     }
 
@@ -838,7 +910,6 @@ static int gt(tif, w, h, raster)
     return (0);
   }
 
-  TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &planarconfig);
   if (planarconfig == PLANARCONFIG_SEPARATE && samplesperpixel > 1) {
     e = TIFFIsTiled(tif) ? gtTileSeparate (tif, raster, Map, h, w, bpp) :
                            gtStripSeparate(tif, raster, Map, h, w, bpp);
@@ -1704,8 +1775,7 @@ static void putRGBseparate16bittile(cp, r, g, b, Map, w, h, fromskew, toskew)
 #define	LumaGreen	YCbCrCoeffs[1]
 #define	LumaBlue	YCbCrCoeffs[2]
 
-static	float D1, D2;
-static	float D3, D4 /*, D5 */;
+static	float D1, D2, D3, D4 /*, D5 */;
 
 
 static void initYCbCrConversion()
@@ -1778,6 +1848,62 @@ static void putRGBContigYCbCrClump(cp, pp, cw, ch, w, n, fromskew, toskew)
   }
 }
 
+static void putRGBSeparateYCbCrClump(cp, y, cb, cr, cw, ch, w, n, fromskew, toskew)
+     byte *cp;
+     u_char *y, *cb, *cr;
+     int cw, ch;
+     uint32 w;
+     int n, fromskew, toskew;
+{
+  float Cb, Cr;
+  int j, k;
+  
+  Cb = Code2V(cb[0], refBlackWhite[2], refBlackWhite[3], 127);
+  Cr = Code2V(cr[0], refBlackWhite[4], refBlackWhite[5], 127);
+  for (j = 0; j < ch; j++) {
+    for (k = 0; k < cw; k++) {
+      float Y, R, G, B;
+      Y = Code2V(y[k], refBlackWhite[0], refBlackWhite[1], 255);
+      R = Y + Cr*D1;
+      G = Y - Cb*D4 - Cr*D2;
+      B = Y + Cb*D3;
+      cp[3*k+0] = CLAMP(R,0,255);
+      cp[3*k+1] = CLAMP(G,0,255);
+      cp[3*k+2] = CLAMP(B,0,255);
+    }
+    cp += w*3 + toskew;
+    y  += w + ch*fromskew;
+  }
+}
+
+static void putRGBSeparate16bitYCbCrClump(cp, y, cb, cr, cw, ch, w, n, fromskew, toskew)
+     byte *cp;
+     u_short *y, *cb, *cr;
+     int cw, ch;
+     uint32 w;
+     int n, fromskew, toskew;
+{
+  float Cb, Cr;
+  int j, k;
+  
+  Cb = Code2V(cb[0], refBlackWhite[2], refBlackWhite[3], 127);
+  Cr = Code2V(cr[0], refBlackWhite[4], refBlackWhite[5], 127);
+  for (j = 0; j < ch; j++) {
+    for (k = 0; k < cw; k++) {
+      float Y, R, G, B;
+      Y = Code2V(y[k], refBlackWhite[0], refBlackWhite[1], 255);
+      R = Y + Cr*D1;
+      G = Y - Cb*D4 - Cr*D2;
+      B = Y + Cb*D3;
+      cp[3*k+0] = CLAMP(R,0,255);
+      cp[3*k+1] = CLAMP(G,0,255);
+      cp[3*k+2] = CLAMP(B,0,255);
+    }
+    cp += w*3 + toskew;
+    y  += w + ch*fromskew;
+  }
+}
+
 #undef LumaBlue
 #undef LumaGreen
 #undef LumaRed
@@ -1829,6 +1955,109 @@ static void putcontig8bitYCbCrtile(cp, pp, Map, w, h, fromskew, toskew)
     if (x > 0)
       putRGBContigYCbCrClump(tp, pp, (int) x, (int) h, w,
 			     (int)Coff, (int)(YCbCrHorizSampling-x),toskew);
+  }
+}
+
+/*
+ * 8-bit unpacked YCbCr samples => RGB
+ */
+static void putYCbCrseparate8bittile(cp, y, cb, cr, Map, w, h, fromskew, toskew)
+     byte *cp;
+     u_char *y, *cb, *cr;
+     RGBvalue *Map;
+     uint32 w, h;
+     int fromskew, toskew;
+{
+  uint32 x;
+  int fromskew2 = fromskew/YCbCrHorizSampling;
+  
+  while (h >= YCbCrVertSampling) {
+    for (x = w; x >= YCbCrHorizSampling; x -= YCbCrHorizSampling) {
+      putRGBSeparateYCbCrClump(cp, y, cb, cr, YCbCrHorizSampling,
+			       YCbCrVertSampling, w, 0, 0, toskew);
+      cp += 3*YCbCrHorizSampling;
+      y += YCbCrHorizSampling;
+      ++cb;
+      ++cr;
+    }
+    if (x > 0) {
+      putRGBSeparateYCbCrClump(cp, y, cb, cr, (int) x, YCbCrVertSampling,
+			       w, 0, (int)(YCbCrHorizSampling - x), toskew);
+      cp += x*3;
+      y += YCbCrHorizSampling;
+      ++cb;
+      ++cr;
+    }
+    cp += (YCbCrVertSampling - 1)*w*3 + YCbCrVertSampling*toskew;
+    y  += (YCbCrVertSampling - 1)*w + YCbCrVertSampling*fromskew;
+    cb += fromskew2;
+    cr += fromskew2;
+    h -= YCbCrVertSampling;
+  }
+  if (h > 0) {
+    for (x = w; x >= YCbCrHorizSampling; x -= YCbCrHorizSampling) {
+      putRGBSeparateYCbCrClump(cp, y, cb, cr, YCbCrHorizSampling, (int) h,
+			       w, 0, 0, toskew);
+      cp += 3*YCbCrHorizSampling;
+      y += YCbCrHorizSampling;
+      ++cb;
+      ++cr;
+    }
+    if (x > 0)
+      putRGBSeparateYCbCrClump(cp, y, cb, cr, (int) x, (int) h, w, 
+			       0, (int)(YCbCrHorizSampling-x),toskew);
+  }
+}
+
+/*
+ * 16-bit unpacked YCbCr samples => RGB
+ */
+static void putYCbCrseparate16bittile(cp, y, cb, cr, Map, w, h, fromskew, toskew)
+     byte *cp;
+     u_short *y, *cb, *cr;
+     RGBvalue *Map;
+     uint32 w, h;
+     int fromskew, toskew;
+{
+  uint32 x;
+  int fromskew2 = fromskew/YCbCrHorizSampling;
+  
+  while (h >= YCbCrVertSampling) {
+    for (x = w; x >= YCbCrHorizSampling; x -= YCbCrHorizSampling) {
+      putRGBSeparate16bitYCbCrClump(cp, y, cb, cr, YCbCrHorizSampling,
+		 		    YCbCrVertSampling, w, 0, 0, toskew);
+      cp += 3*YCbCrHorizSampling;
+      y += YCbCrHorizSampling;
+      ++cb;
+      ++cr;
+    }
+    if (x > 0) {
+      putRGBSeparate16bitYCbCrClump(cp, y, cb, cr, (int) x, YCbCrVertSampling,
+				    w, 0, (int)(YCbCrHorizSampling - x),
+				    toskew);
+      cp += x*3;
+      y += YCbCrHorizSampling;
+      ++cb;
+      ++cr;
+    }
+    cp += (YCbCrVertSampling - 1)*w*3 + YCbCrVertSampling*toskew;
+    y  += (YCbCrVertSampling - 1)*w + YCbCrVertSampling*fromskew;
+    cb += fromskew2;
+    cr += fromskew2;
+    h -= YCbCrVertSampling;
+  }
+  if (h > 0) {
+    for (x = w; x >= YCbCrHorizSampling; x -= YCbCrHorizSampling) {
+      putRGBSeparate16bitYCbCrClump(cp, y, cb, cr, YCbCrHorizSampling, (int) h,
+				    w, 0, 0, toskew);
+      cp += 3*YCbCrHorizSampling;
+      y += YCbCrHorizSampling;
+      ++cb;
+      ++cr;
+    }
+    if (x > 0)
+      putRGBSeparate16bitYCbCrClump(cp, y, cb, cr, (int) x, (int) h, w, 
+			 	    0, (int)(YCbCrHorizSampling-x),toskew);
   }
 }
 
@@ -1896,6 +2125,13 @@ static tileSeparateRoutine pickTileSeparateCase(Map)
     switch (bitspersample) {
     case  8: put = (tileSeparateRoutine) putRGBseparate8bittile;  break;
     case 16: put = (tileSeparateRoutine) putRGBseparate16bittile; break;
+    }
+    break;
+
+  case PHOTOMETRIC_YCBCR:
+    switch (bitspersample) {
+    case  8: put = (tileSeparateRoutine) putYCbCrseparate8bittile;  break;
+    case 16: put = (tileSeparateRoutine) putYCbCrseparate16bittile; break;
     }
     break;
   }

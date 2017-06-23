@@ -61,7 +61,7 @@ char          *cmd, tmpstr[128];
        int  main             PARM((int, char **));
 static void HandleEvent      PARM((XEvent *));
 static void Syntax           PARM((void));
-static void FatalError       PARM((char *));
+static void FatalError       PARM((const char *));
 static void Quit             PARM((void));
 static void CreateMainWindow PARM((char *, char *, int, char **));
 static void DrawWindow       PARM((int,int,int,int));
@@ -245,10 +245,10 @@ static void Syntax()
 
 
 /***********************************/
-static void FatalError (identifier)
-     char *identifier;
+static void FatalError(identifier)
+     const char *identifier;
 {
-  fprintf(stderr, "%s: %s\n",cmd, identifier);
+  fprintf(stderr, "%s: %s\n", cmd, identifier);
   exit(-1);
 }
 

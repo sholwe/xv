@@ -12,16 +12,19 @@
  */
 
 /*#include "copyright.h"*/
+
 /* (c) 1995 by Alexander Lehmann <lehmann@mathematik.th-darmstadt.de>
  *   This file is a suplement to xv and is supplied under the same copying
  *   conditions (except the shareware part).
+ *   The copyright will be passed on to JB at some future point if he
+ *   so desires.
+ *
  * Modified by Andreas Dilger <adilger@enel.ucalgary.ca> to fix
  *   error handling for bad PNGs, add dialogs for interlacing and
  *   compression selection, and upgrade to libpng-0.89.
+ *
  * Modified by Greg Roelofs, TenThumbs and others to fix bugs and add
- *   features.
- * The copyright will be passed on to JB at some future point if he
- * so desires.
+ *   features.  See README.jumbo for details.
  */
 
 #include "xv.h"
@@ -38,13 +41,13 @@
 #define COMPRESSION   6     /* default zlib compression level, not max
                                (Z_BEST_COMPRESSION) */
 
-#define HAVE_tRNS     (info_ptr->valid & PNG_INFO_tRNS)
+#define HAVE_tRNS  (info_ptr->valid & PNG_INFO_tRNS)
 
-#define DWIDE     86
+#define DWIDE    86
 #define DHIGH    104
-#define PFX PWIDE-93
-#define PFY       44
-#define PFH       20
+#define PFX      (PWIDE-93)
+#define PFY      44
+#define PFH      20
 
 #define P_BOK    0
 #define P_BCANC  1
@@ -70,7 +73,7 @@ static    void png_xv_warning PARM((png_structp png_ptr,
 
 /*** local variables ***/
 static char *filename;
-static char *fbasename;
+static const char *fbasename;
 static int   colorType;
 static int   read_anything;
 static double Display_Gamma = DISPLAY_GAMMA;
@@ -79,6 +82,35 @@ static DIAL  cDial, gDial;
 static BUTT  pbut[P_NBUTTS];
 static CBUTT interCB;
 static CBUTT FdefCB, FnoneCB, FsubCB, FupCB, FavgCB, FPaethCB;
+
+
+#ifdef PNG_NO_STDIO
+/* NOTE:  Some sites configure their version of the PNG Library without
+ *        Standard I/O Library interfaces in order to avoid unnecessary inter-
+ * library dependencies at link time for applications that don't need Standard
+ * I/O.  If your site is one of these, the following skeletal stubs, copied
+ * from libpng code, should be enough for this module.  --Scott B. Marovich,
+ * Hewlett-Packard Laboratories, March 2001.
+ */
+static void
+png_default_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
+{
+
+   /* fread() returns 0 on error, so it is OK to store this in a png_size_t
+    * instead of an int, which is what fread() actually returns.
+    */
+   if (fread(data,1,length,(FILE *)png_ptr->io_ptr) != length)
+     png_error(png_ptr, "Read Error");
+}
+
+static void
+png_default_write_data(png_structp png_ptr, png_bytep data, png_size_t length)
+{
+   if (fwrite(data, 1, length, (FILE *)png_ptr->io_ptr) != length)
+     png_error(png_ptr, "Write Error");
+}
+#endif /* PNG_NO_STDIO */
+
 
 /**************************************************************************/
 /* PNG SAVE DIALOG ROUTINES ***********************************************/
@@ -236,14 +268,14 @@ void PNGSaveParams(fname, col)
 static void drawPD(x, y, w, h)
      int x, y, w, h;
 {
-  char *title   = "Save PNG file...";
+  const char *title   = "Save PNG file...";
 
   char ctitle1[20];
-  char *ctitle2 = "Useful range";
-  char *ctitle3 = "is 2 - 7.";
-  char *ctitle4 = "Uncompressed = 0";
+  const char *ctitle2 = "Useful range";
+  const char *ctitle3 = "is 2 - 7.";
+  const char *ctitle4 = "Uncompressed = 0";
 
-  char *ftitle  = "Row Filters:";
+  const char *ftitle  = "Row Filters:";
 
   char gtitle[20];
 
@@ -399,21 +431,23 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
      int   ptype, w, h;
      byte *rmap, *gmap, *bmap;
      int   numcols;
+     /* FIXME?  what's diff between picComments and WriteGIF's comment arg? */
 {
   png_struct *png_ptr;
   png_info   *info_ptr;
   png_color   palette[256];
   png_textp   text;
-  byte        remap[256];
-  int         i, filter, linesize, pass;
+  byte        r1[256], g1[256], b1[256];  /* storage for deduped palette */
+  byte        pc2nc[256];  /* for duplicated-color remapping (1st level) */
+  byte        remap[256];  /* for bw/grayscale remapping (2nd level) */
+  int         i, j, numuniqcols=0, filter, linesize, pass;
   byte       *p, *png_line;
   char        software[256];
   char       *savecmnt;
 
   if ((png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL,
        png_xv_error, png_xv_warning)) == NULL) {
-    sprintf(software, "png_create_write_struct() failure in WritePNG (ver. %s)",
-      PNG_LIBPNG_VER_STRING);
+    sprintf(software, "png_create_write_struct() failure in WritePNG");
     FatalError(software);
   }
 
@@ -429,7 +463,12 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
     return -1;
   }
 
+#ifdef PNG_NO_STDIO
+  png_set_write_fn(png_ptr, fp, png_default_write_data, NULL);
+  png_set_error_fn(png_ptr, NULL, png_xv_error, png_xv_warning);
+#else
   png_init_io(png_ptr, fp);
+#endif
 
   png_set_compression_level(png_ptr, (int)cDial.val);
 
@@ -463,8 +502,39 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
 
   linesize = 0;   /* quiet a compiler warning */
 
+
+  /* GRR 20070331:  remap palette to eliminate duplicated colors (as in
+   *   xvgifwr.c) */
+  if (ptype == PIC8) {
+    for (i=0; i<256; ++i) {
+      pc2nc[i] = r1[i] = g1[i] = b1[i] = 0;
+    }
+
+    /* compute number of unique colors */
+    numuniqcols = 0;
+
+    for (i=0; i<numcols; ++i) {
+      /* see if color #i is already used */
+      for (j=0; j<i; ++j) {
+        if (rmap[i] == rmap[j]  &&  gmap[i] == gmap[j]  &&  bmap[i] == bmap[j])
+          break;
+      }
+
+      if (j==i) {  /* wasn't found */
+        pc2nc[i] = numuniqcols;
+        r1[numuniqcols] = rmap[i];  /* i.e., r1[pc2nc[i]] == rmap[i] */
+        g1[numuniqcols] = gmap[i];
+        b1[numuniqcols] = bmap[i];
+        ++numuniqcols;
+      }
+      else pc2nc[i] = pc2nc[j];
+    }
+  }
+
+
+  /* Appendix G.2 of user manual claims colorType will never be F_REDUCED... */
   if (colorType == F_FULLCOLOR || colorType == F_REDUCED) {
-    if(ptype == PIC24) {
+    if (ptype == PIC24) {
       linesize = 3*w;
       if (linesize/3 < w) {
         SetISTR(ISTR_WARNING, "%s:  image dimensions too large (%dx%d)",
@@ -474,39 +544,39 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
       }
       info_ptr->color_type = PNG_COLOR_TYPE_RGB;
       info_ptr->bit_depth = 8;
-    } else {
+    } else /* ptype == PIC8 */ {
       linesize = w;
       info_ptr->color_type = PNG_COLOR_TYPE_PALETTE;
-      if(numcols <= 2)
+      if (numuniqcols <= 2)
         info_ptr->bit_depth = 1;
       else
-      if(numcols <= 4)
+      if (numuniqcols <= 4)
         info_ptr->bit_depth = 2;
       else
-      if(numcols <= 16)
+      if (numuniqcols <= 16)
         info_ptr->bit_depth = 4;
       else
         info_ptr->bit_depth = 8;
 
-      for(i = 0; i < numcols; i++) {
-        palette[i].red   = rmap[i];
-        palette[i].green = gmap[i];
-        palette[i].blue  = bmap[i];
+      for (i = 0; i < numuniqcols; i++) {
+        palette[i].red   = r1[i];
+        palette[i].green = g1[i];
+        palette[i].blue  = b1[i];
       }
-      info_ptr->num_palette = numcols;
+      info_ptr->num_palette = numuniqcols;
       info_ptr->palette = palette;
       info_ptr->valid |= PNG_INFO_PLTE;
     }
   }
 
-  else if(colorType == F_GREYSCALE || colorType == F_BWDITHER) {
+  else if (colorType == F_GREYSCALE || colorType == F_BWDITHER) {
     info_ptr->color_type = PNG_COLOR_TYPE_GRAY;
-    if(colorType == F_BWDITHER) {
+    if (colorType == F_BWDITHER) {
       /* shouldn't happen */
       if (ptype == PIC24) FatalError("PIC24 and B/W Stipple in WritePNG()");
 
       info_ptr->bit_depth = 1;
-      if(MONO(rmap[0], gmap[0], bmap[0]) > MONO(rmap[1], gmap[1], bmap[1])) {
+      if (MONO(r1[0], g1[0], b1[0]) > MONO(r1[1], g1[1], b1[1])) {
         remap[0] = 1;
         remap[1] = 0;
       }
@@ -516,8 +586,8 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
       }
       linesize = w;
     }
-    else {
-      if(ptype == PIC24) {
+    else /* F_GREYSCALE */ {
+      if (ptype == PIC24) {
         linesize = 3*w;
         if (linesize/3 < w) {
           SetISTR(ISTR_WARNING, "%s:  image dimensions too large (%dx%d)",
@@ -527,65 +597,75 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
         }
         info_ptr->bit_depth = 8;
       }
-      else {
+      else /* ptype == PIC8 */ {
         int low_precision;
 
         linesize = w;
 
-        for(i = 0; i < numcols; i++)
-          remap[i] = MONO(rmap[i], gmap[i], bmap[i]);
+        /* NOTE:  currently remap[] is the _secondary_ remapping of "palette"
+         *   colors; its values are the final color/grayscale values, and,
+         *   like r1/g1/b1[], it is _indexed_ by pc2nc[] (which is why its
+         *   values come from r1/g1/b1[] and not from rmap/gmap/bmap[]).
+         *
+         * FIXME (probably):  MONO() will create new duplicates; ideally should
+         *   do extra round of dup-detection (and preferably collapse all
+         *   remapping levels into single LUT).  This stuff is a tad confusing.
+         */
+        for (i = 0; i < numuniqcols; i++)
+          remap[i] = MONO(r1[i], g1[i], b1[i]);
 
-        for(; i < 256; i++)
-          remap[i]=0;
+        for (; i < 256; i++)
+          remap[i]=0;  /* shouldn't be necessary, but... */
 
         info_ptr->bit_depth = 8;
 
         /* Note that this fails most of the time because of gamma */
+           /* (and that would be a bug:  GRR FIXME) */
         /* try to adjust to 4-bit precision grayscale */
 
         low_precision=1;
 
-        for(i = 0; i < numcols; i++) {
-          if((remap[i] & 0x0f) * 0x11 != remap[i]) {
+        for (i = 0; i < numuniqcols; i++) {
+          if ((remap[i] & 0x0f) * 0x11 != remap[i]) {
             low_precision = 0;
             break;
           }
         }
 
-        if(low_precision) {
-          for(i = 0; i < numcols; i++) {
+        if (low_precision) {
+          for (i = 0; i < numuniqcols; i++) {
             remap[i] &= 0xf;
           }
           info_ptr->bit_depth = 4;
 
           /* try to adjust to 2-bit precision grayscale */
 
-          for(i = 0; i < numcols; i++) {
-            if((remap[i] & 0x03) * 0x05 != remap[i]) {
+          for (i = 0; i < numuniqcols; i++) {
+            if ((remap[i] & 0x03) * 0x05 != remap[i]) {
               low_precision = 0;
               break;
             }
           }
         }
 
-        if(low_precision) {
-          for(i = 0; i < numcols; i++) {
+        if (low_precision) {
+          for (i = 0; i < numuniqcols; i++) {
             remap[i] &= 3;
           }
           info_ptr->bit_depth = 2;
 
           /* try to adjust to 1-bit precision grayscale */
 
-          for(i = 0; i < numcols; i++) {
-            if((remap[i] & 0x01) * 0x03 != remap[i]) {
+          for (i = 0; i < numuniqcols; i++) {
+            if ((remap[i] & 0x01) * 0x03 != remap[i]) {
               low_precision = 0;
               break;
             }
           }
         }
 
-        if(low_precision) {
-          for(i = 0; i < numcols; i++) {
+        if (low_precision) {
+          for (i = 0; i < numuniqcols; i++) {
             remap[i] &= 1;
           }
           info_ptr->bit_depth = 1;
@@ -612,32 +692,40 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
 
   Display_Gamma = gDial.val;  /* Save the current gamma for loading */
 
+// GRR FIXME:  add .Xdefaults option to omit writing gamma (size, cumulative errors when editing)--alternatively, modify save box to include "omit" checkbox
   info_ptr->gamma = 1.0/gDial.val;
   info_ptr->valid |= PNG_INFO_gAMA;
 
   png_write_info(png_ptr, info_ptr);
 
-  if(info_ptr->bit_depth < 8)
+  if (info_ptr->bit_depth < 8)
     png_set_packing(png_ptr);
 
   pass=png_set_interlace_handling(png_ptr);
 
-  if((png_line = malloc(linesize)) == NULL)
+  if ((png_line = malloc(linesize)) == NULL)
     png_error(png_ptr, "cannot allocate temp image line");
+    /* FIXME:  should be FatalError() */
 
-  for(i = 0; i < pass; i++) {
+  for (i = 0; i < pass; ++i) {
     int j;
     p = pic;
-    for(j = 0; j < h; j++) {
-      if(info_ptr->color_type == PNG_COLOR_TYPE_GRAY) {
+    for (j = 0; j < h; ++j) {
+      if (info_ptr->color_type == PNG_COLOR_TYPE_GRAY) {
         int k;
-        for(k = 0; k < w; k++)
+        for (k = 0; k < w; ++k)
           png_line[k] = ptype==PIC24 ? MONO(p[k*3], p[k*3+1], p[k*3+2]) :
-                                       remap[p[k]];
+                                       remap[pc2nc[p[k]]];
         png_write_row(png_ptr, png_line);
-      } else  /* RGB or palette */
+      } else if (info_ptr->color_type == PNG_COLOR_TYPE_PALETTE) {
+        int k;
+        for (k = 0; k < w; ++k)
+          png_line[k] = pc2nc[p[k]];
+        png_write_row(png_ptr, png_line);
+      } else {  /* PNG_COLOR_TYPE_RGB */
         png_write_row(png_ptr, p);
-      if((j & 0x1f) == 0) WaitCursor();
+      }
+      if ((j & 0x1f) == 0) WaitCursor();
       p += linesize;
     }
   }
@@ -646,8 +734,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
 
   savecmnt = NULL;   /* quiet a compiler warning */
 
-  if (text)
-  {
+  if (text) {
     if (picComments && strlen(picComments) &&
         (savecmnt = (char *)malloc((strlen(picComments) + 1)*sizeof(char)))) {
       png_textp tp;
@@ -679,7 +766,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
 
         /* See if it looks like a PNG keyword from LoadPNG */
         /* GRR: should test for strictly < 80, right? (key = 1-79 chars only) */
-        if(comment && comment[1] == ':' && comment - key <= 80) {
+        if (comment && comment[1] == ':' && comment - key <= 80) {
           *(comment++) = '\0';
           *(comment++) = '\0';
 
@@ -687,7 +774,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
              since we have already stored one */
           if (strcmp(key, "Software") == 0 && strncmp(comment, "XV", 2) == 0) {
             key = strchr(comment, '\n');
-            if(key)
+            if (key)
               key++; /* skip \n */
             comment = strchr(key, ':');
           }
@@ -704,7 +791,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
 
             /* It looks like another keyword, go backward to the beginning */
             if (key) {
-              while(key > tp->text && *key != '\n')
+              while (key > tp->text && *key != '\n')
                 key--;
 
               if (key > tp->text && comment - key <= 80) {
@@ -752,8 +839,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
         }
       } while (key && *key);
     }
-    else
-    {
+    else {
       info_ptr->num_text = 0;
     }
   }
@@ -765,8 +851,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
   png_write_end(png_ptr, info_ptr);
   fflush(fp);   /* just in case we core-dump before finishing... */
 
-  if (text)
-  {
+  if (text) {
     free(text);
     /* must do this or png_destroy_write_struct() 0.97+ will free text again: */
     info_ptr->text = (png_textp)NULL;
@@ -823,28 +908,28 @@ int LoadPNG(fname, pinfo)
 
   png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL,
                                    png_xv_error, png_xv_warning);
-  if(!png_ptr) {
+  if (!png_ptr) {
     fclose(fp);
     FatalError("malloc failure in LoadPNG");
   }
 
   info_ptr = png_create_info_struct(png_ptr);
 
-  if(!info_ptr) {
+  if (!info_ptr) {
     fclose(fp);
     png_destroy_read_struct(&png_ptr, (png_infopp)NULL, (png_infopp)NULL);
     FatalError("malloc failure in LoadPNG");
   }
 
-  if(setjmp(png_ptr->jmpbuf)) {
+  if (setjmp(png_ptr->jmpbuf)) {
     fclose(fp);
     png_destroy_read_struct(&png_ptr, &info_ptr, (png_infopp)NULL);
-    if(!read_anything) {
-      if(pinfo->pic) {
+    if (!read_anything) {
+      if (pinfo->pic) {
         free(pinfo->pic);
         pinfo->pic = NULL;
       }
-      if(pinfo->comment) {
+      if (pinfo->comment) {
         free(pinfo->comment);
         pinfo->comment = NULL;
       }
@@ -852,7 +937,12 @@ int LoadPNG(fname, pinfo)
     return read_anything;
   }
 
+#ifdef PNG_NO_STDIO
+  png_set_read_fn(png_ptr, fp, png_default_read_data);
+  png_set_error_fn(png_ptr, NULL, png_xv_error, png_xv_warning);
+#else
   png_init_io(png_ptr, fp);
+#endif
   png_read_info(png_ptr, info_ptr);
 
   pinfo->w = pinfo->normw = info_ptr->width;
@@ -902,8 +992,10 @@ int LoadPNG(fname, pinfo)
 
   if (info_ptr->valid & PNG_INFO_gAMA)
     png_set_gamma(png_ptr, Display_Gamma, info_ptr->gamma);
-  else
-    png_set_gamma(png_ptr, Display_Gamma, 0.45);
+/*
+ *else
+ *  png_set_gamma(png_ptr, Display_Gamma, 0.45);
+ */
 
   gray_to_rgb = 0;   /* quiet a compiler warning */
 
@@ -912,7 +1004,7 @@ int LoadPNG(fname, pinfo)
       my_background.red   = imagebgR;
       my_background.green = imagebgG;
       my_background.blue  = imagebgB;
-      my_background.gray = imagebgG;   /* only used if all three equal... */
+      my_background.gray = imagebgG;   /* used only if all three equal... */
     } else {
       my_background.red   = (imagebgR >> 8);
       my_background.green = (imagebgG >> 8);
@@ -958,7 +1050,7 @@ int LoadPNG(fname, pinfo)
 
   png_read_update_info(png_ptr, info_ptr);
 
-  if(info_ptr->color_type == PNG_COLOR_TYPE_RGB ||
+  if (info_ptr->color_type == PNG_COLOR_TYPE_RGB ||
      info_ptr->color_type == PNG_COLOR_TYPE_RGB_ALPHA || gray_to_rgb)
   {
     linesize = 3 * pinfo->w;
@@ -973,13 +1065,13 @@ int LoadPNG(fname, pinfo)
   } else {
     linesize = pinfo->w;
     pinfo->type = PIC8;
-    if(info_ptr->color_type == PNG_COLOR_TYPE_GRAY ||
+    if (info_ptr->color_type == PNG_COLOR_TYPE_GRAY ||
        info_ptr->color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
-      for(i = 0; i < 256; i++)
+      for (i = 0; i < 256; i++)
         pinfo->r[i] = pinfo->g[i] = pinfo->b[i] = i;
     } else {
       pinfo->colType = F_FULLCOLOR;
-      for(i = 0; i < info_ptr->num_palette; i++) {
+      for (i = 0; i < info_ptr->num_palette; i++) {
         pinfo->r[i] = info_ptr->palette[i].red;
         pinfo->g[i] = info_ptr->palette[i].green;
         pinfo->b[i] = info_ptr->palette[i].blue;
@@ -996,37 +1088,37 @@ int LoadPNG(fname, pinfo)
   }
   pinfo->pic = calloc((size_t)bufsize, (size_t)1);
 
-  if(!pinfo->pic) {
+  if (!pinfo->pic) {
     png_error(png_ptr, "can't allocate space for PNG image");
   }
 
   png_start_read_image(png_ptr);
 
-  for(i = 0; i < pass; i++) {
+  for (i = 0; i < pass; i++) {
     byte *p = pinfo->pic;
-    for(j = 0; j < pinfo->h; j++) {
+    for (j = 0; j < pinfo->h; j++) {
       png_read_row(png_ptr, p, NULL);
       read_anything = 1;
-      if((j & 0x1f) == 0) WaitCursor();
+      if ((j & 0x1f) == 0) WaitCursor();
       p += linesize;
     }
   }
 
   png_read_end(png_ptr, info_ptr);
 
-  if(info_ptr->num_text > 0) {
+  if (info_ptr->num_text > 0) {
     commentsize = 1;
 
-    for(i = 0; i < info_ptr->num_text; i++)
+    for (i = 0; i < info_ptr->num_text; i++)
       commentsize += strlen(info_ptr->text[i].key) + 1 +
                      info_ptr->text[i].text_length + 2;
 
-    if((pinfo->comment = malloc(commentsize)) == NULL) {
+    if ((pinfo->comment = malloc(commentsize)) == NULL) {
       png_warning(png_ptr,"can't allocate comment string");
     }
     else {
       pinfo->comment[0] = '\0';
-      for(i = 0; i < info_ptr->num_text; i++) {
+      for (i = 0; i < info_ptr->num_text; i++) {
         strcat(pinfo->comment, info_ptr->text[i].key);
         strcat(pinfo->comment, "::");
         strcat(pinfo->comment, info_ptr->text[i].text);

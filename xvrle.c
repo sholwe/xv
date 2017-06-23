@@ -28,7 +28,7 @@
 #define GETINT(fp) (c=getc(fp), c1=getc(fp), (c1<<8) + c )
 
 static void read_rle PARM((FILE *, byte *, int, int, int, int));
-static int  rleError PARM((char *, char *));
+static int  rleError PARM((const char *, const char *));
 
 
 
@@ -46,7 +46,8 @@ int LoadRLE(fname, pinfo)
   int    cmtlen;
   byte  *img;
   long filesize;
-  char  *bname, *errstr;
+  const char *bname;
+  const char *errstr;
 
   pinfo->type = PIC8;
   pinfo->pic     = (byte *) NULL;
@@ -373,7 +374,7 @@ static void read_rle(fp, img, w, h, ncolors, ncmap)
 
 /*******************************************/
 static int rleError(fname,st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;

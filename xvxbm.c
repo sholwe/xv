@@ -27,7 +27,7 @@
  */
 
 
-static int xbmError PARM((char *, char *));
+static int xbmError PARM((const char *, const char *));
 
 
 /*******************************************/
@@ -44,7 +44,7 @@ int LoadXBM(fname, pinfo)
   long   filesize;
   char   line[256], name[256];
   byte   hex[256];
-  char  *bname;
+  const char  *bname;
 
   k = 0;
 
@@ -120,7 +120,7 @@ int LoadXBM(fname, pinfo)
   /* read/convert the image data */
 
   for (i=0, pix=pic8; i<h; i++)
-    for (j=0,bit=0; j<w; j++, pix++, bit = (++bit)&7) {
+    for (j=0,bit=0; j<w; j++, pix++, bit = (bit+1)&7) {
 
       if (!bit) {
 	/* get next byte from file.  we're already positioned at it */
@@ -155,7 +155,7 @@ int LoadXBM(fname, pinfo)
 
 /*******************************************/
 static int xbmError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;
@@ -182,8 +182,7 @@ int WriteXBM(fp, pic, w, h, rmap, gmap, bmap, fname)
   byte *pix;
   char name[256], *foo;
 
-  foo = BaseName(fname);
-  strcpy(name, foo);
+  strcpy(name, BaseName(fname));
 
   foo = (char *) index(name,'.');
   if (foo) *foo='\0';                 /* truncated name at first '.' */

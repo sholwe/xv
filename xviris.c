@@ -80,7 +80,7 @@ typedef struct {
 #define CHANOFFSET(z)	(3-(z))	/* this is byte order dependent */
 
 
-static int      irisError     PARM((char *, char *));
+static int      irisError     PARM((const char *, const char *));
 static byte    *getimagedata  PARM((FILE *, IMAGE *));
 static void     interleaverow PARM((byte *, byte *, int, int));
 static void     expandrow     PARM((byte *, byte *, int));
@@ -97,8 +97,8 @@ static void     putshort      PARM((FILE *, int));
 static void     putlong       PARM((FILE *, u_long));
 
 
-static char *loaderr;
-static char *bname;
+static const char *loaderr;
+static const char *bname;
 
 /*****************************************************/
 int LoadIRIS(fname, pinfo)
@@ -234,7 +234,7 @@ int LoadIRIS(fname, pinfo)
 
 /*******************************************/
 static int irisError(name, st)
-  char *name, *st;
+  const char *name, *st;
 {
   SetISTR(ISTR_WARNING,"%s: %s", name, st);
   return 0;
@@ -259,7 +259,7 @@ static byte *getimagedata(fp, img)
 
   rle     = ISRLE(img->type);
   bpp     = BPP(img->type);
-  loaderr = (char *) NULL;
+  loaderr = (const char *) NULL;
 
   if (bpp != 1) {
     loaderr = "image must have 1 byte per pix chan";

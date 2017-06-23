@@ -449,18 +449,18 @@ static int ppm_quant(pic24, cols, rows, pic8, rmap, gmap, bmap, newcolors)
      byte *pic24, *pic8, *rmap, *gmap, *bmap;
      int  cols, rows, newcolors;
 {
-  pixel**          pixels;
-  register pixel*  pP;
-  int              row;
-  register int     col, limitcol;
-  pixval           maxval, newmaxval;
-  int              colors;
-  register int     index;
-  chist_vec chv, colormap;
-  chash_table  cht;
-  int              i;
-  unsigned char    *picptr;
-  static char      *fn = "ppmquant()";
+  pixel**           pixels;
+  register pixel*   pP;
+  int               row;
+  register int      col, limitcol;
+  pixval            maxval, newmaxval;
+  int               colors;
+  register int      index;
+  chist_vec         chv, colormap;
+  chash_table       cht;
+  int               i;
+  unsigned char     *picptr;
+  static const char *fn = "ppmquant()";
 
   index = 0;
   maxval = 255;

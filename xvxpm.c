@@ -48,8 +48,8 @@ static short	in_quote;	/* Is the current point in the file in */
                                 /*  a quoted string? */
 
 /* Local Functions */
-static int     XpmLoadError  PARM((char*, char*));
-static int     XpmGetc	     PARM((FILE*));
+static int     XpmLoadError  PARM((const char *, const char *));
+static int     XpmGetc	     PARM((FILE *));
 static int     hash          PARM((char *));
 static int     hash_init     PARM((int));
 static int     hash_insert   PARM((hentry *));
@@ -67,7 +67,7 @@ int LoadXPM(fname, pinfo)
   FILE    *fp;
   hentry   item;
   int      c;
-  char    *bname;
+  const char *bname;
   char     values[VALUES_LEN];
   byte    *pic;
   byte    *i_sptr;		/* image search pointer */
@@ -358,7 +358,7 @@ int LoadXPM(fname, pinfo)
 
 /***************************************/
 static int XpmLoadError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING, "%s:  %s", fname, st);
   return 0;
@@ -532,7 +532,7 @@ int WriteXPM(fp, pic, ptype, w, h, rp, gp, bp, nc, col, name, comments)
 
   short	i, imax, j;	/* for() loop indices */
   short	cpp = 0;
-  char	*tokenchars =
+  const char *tokenchars =
             ".#abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   char	*tokens;
   char	image_name[256], *foo;
@@ -553,8 +553,7 @@ int WriteXPM(fp, pic, ptype, w, h, rp, gp, bp, nc, col, name, comments)
       printf("WriteXPM(): Write a colortype %d, PIC24 image.\n", col);
   }
 
-  foo = BaseName(name);
-  strcpy(image_name, foo);
+  strcpy(image_name, BaseName(name));
   foo = (char *)strchr(image_name, '.');
   if (foo)
     *foo = '\0';		/* Truncate name at first '.' */

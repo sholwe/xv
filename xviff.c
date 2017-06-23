@@ -40,13 +40,13 @@
 static long filesize;
 
 /* static int           readID       PARM((FILE *, char *));  DOES NOT EXIST */
-static int           iffError     PARM((char *, char *));
+static int           iffError     PARM((const char *, const char *));
 static void          decomprle    PARM((byte *, byte *, long, long));
 static unsigned int  iff_getword  PARM((byte *));
 static unsigned long iff_getlong  PARM((byte *));
 
 
-static char *bname;
+static const char *bname;
 
 
 /* Define internal ILBM types */
@@ -545,7 +545,7 @@ static unsigned long iff_getlong(ptr)
 
 /*******************************************/
 static int iffError(fname, st)
-     char *fname, *st;
+     const char *fname, *st;
 {
   SetISTR(ISTR_WARNING,"%s:  %s", fname, st);
   return 0;

@@ -52,7 +52,7 @@ void CreateGraf(gp, parent, x, y, fg, bg, title)
      Window parent;
      int x,y;
      unsigned long fg,bg;
-     char *title;
+     const char *title;
 {
   /* NOTE:  CreateGraf does not initialize hands[], nhands, or spline,
      as these could be initialized by X resources (or whatever),
@@ -168,8 +168,8 @@ int   erase;
 
 
   if (gp->entergamma) {
-    char *str1 = "Enter gamma";
-    char *str2 = "value: ";
+    const char *str1 = "Enter gamma";
+    const char *str2 = "value: ";
 
     XSetForeground(theDisp, theGC, gp->fg);
     XSetBackground(theDisp, theGC, gp->bg);
@@ -480,20 +480,20 @@ static void drawHandPos(gp, hnum)
      int   hnum;
 {
   int w;
-  char *tstr = "888,888";
+  const char *tstr = "888,888";
 
   /* if hnum < 0, clears the text area */
 
   XSetFont(theDisp, theGC, monofont);
   w = XTextWidth(monofinfo, tstr, (int) strlen(tstr));
 
-  if (hnum >= 0) sprintf(str,"%3d,%3d",gp->hands[hnum].x,gp->hands[hnum].y);
-            else sprintf(str,"       ");
+  if (hnum >= 0) sprintf(dummystr,"%3d,%3d",gp->hands[hnum].x,gp->hands[hnum].y);
+            else sprintf(dummystr,"       ");
 
   XSetForeground(theDisp, theGC, gp->fg);
   XSetBackground(theDisp, theGC, gp->bg);
   XDrawImageString(theDisp, gp->win, theGC, 130-w, 1+ASCENT,
-		   str, (int) strlen(str));
+		   dummystr, (int) strlen(dummystr));
 
   XSetFont(theDisp, theGC, mfont);
 }
@@ -729,8 +729,8 @@ char *str;
 
 /*********************/
 int Str2Graf(gp, str)
-GRAF_STATE *gp;
-char *str;
+     GRAF_STATE *gp;
+     const char *str;
 {
   /* parses strings of the form: "S 3 : 0,0 : 63,63 : 255,255",
      (meaning SPLINE, 3 points, and the 3 sets of handle coordinates)
@@ -744,14 +744,15 @@ char *str;
      thing tends to break optimizers */
 
   char   tstr[256], tstr1[256], *sp, *dp;
+  const char *csp;
   XPoint coords[MAX_GHANDS];
   int    spline, nhands, i, x, y;
 
   if (!str) return 1;  /* NULL strings don't parse well! */
 
   /* first, strip all pesky whitespace from str */
-  for (sp=str, dp=tstr; *sp; sp++)
-    if (*sp > ' ') { *dp = *sp;  dp++; }
+  for (csp=str, dp=tstr; *csp; csp++)
+    if (*csp > ' ') { *dp = *csp;  dp++; }
   *dp = '\0';
 
   /* check for 'gamma'-style str */
@@ -761,7 +762,7 @@ char *str;
       gp->gammamode = 1;
       sprintf(gp->gvstr, "%.5g", gp->gamma);
       return 0;
-      }
+    }
     else return 1;
   }
 

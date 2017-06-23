@@ -96,36 +96,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* include a malloc.h, of some sort... */
-#ifndef VMS   /* VMS hates multi-line '#if's */
-# if !defined(ibm032)                    && \
-     !defined(__convex__)                && \
-     !(defined(vax) && !defined(ultrix)) && \
-     !defined(mips)                      && \
-     !defined(apollo)                    && \
-     !defined(pyr)                       && \
-     !defined(__UMAXV__)                 && \
-     !defined(bsd43)                     && \
-     !defined(__bsd43)                   && \
-     !defined(aux)                       && \
-     !defined(__bsdi__)                  && \
-     !defined(sequent)                   && \
-     !defined(__FreeBSD__)               && \
-     !defined(__OpenBSD__)
+/* include a malloc.h of some sort (if needed...most systems use stdlib.h) */
+#ifndef VMS   /* VMS hates multi-line "#if"s */
+   /*
+    * I want to use BSD macro for checking if this OS is *BSD or not,
+    * but the macro is defined in <sys/parm.h>, which I don't know all
+    * machine has or not.
+    */
+#  if !defined(ibm032)                    && \
+      !defined(__convex__)                && \
+      !(defined(vax) && !defined(ultrix)) && \
+      !defined(mips)                      && \
+      !defined(apollo)                    && \
+      !defined(pyr)                       && \
+      !defined(sequent)                   && \
+      !defined(__UMAXV__)                 && \
+      !defined(aux)                       && \
+      !defined(bsd43)                     && \
+      !defined(__bsd43)                   && \
+      !defined(__bsdi__)                  && \
+      !defined(__386BSD__)                && \
+      !defined(__FreeBSD__)               && \
+      !defined(__OpenBSD__)               && \
+      !defined(__NetBSD__)                && \
+      !defined(__DARWIN__)
 
-#  if defined(hp300) || defined(hp800) || defined(NeXT)
-#   include <sys/malloc.h>                /* it's in 'sys' on HPs and NeXT */
-#  else
-#   if !defined(__386BSD__) && !defined(__FreeBSD__) && !defined(__NetBSD__)
-    /*
-     I want to use BSD macro for checking if this OS is *BSD or not,
-     but the macro is defined in <sys/parm.h>, which I don't know all
-     machine has or not.
-     */
-#     include <malloc.h>
-#   endif
-#  endif
-# endif
+#    if defined(hp300) || defined(hp800) || defined(NeXT)
+#      include <sys/malloc.h>    /* it's in "sys" on HPs and NeXT */
+#    else
+#      include <malloc.h>        /* FIXME: should explicitly list systems that NEED this, not everyone that doesn't */
+#    endif
+
+#  endif /* !most modern systems */
 #endif /* !VMS */
 
 
@@ -154,9 +156,9 @@ typedef struct leaf { struct leaf *right;
  once the tree is created by the accompanying routine huff_tree.
 **************************************************************************/
 
-  NODE *tree;
+static NODE *tree;
 
-/* subroutine definitions                                           */
+/* subroutine definitions */
 
 #undef PARM
 #ifdef __STDC__
@@ -184,7 +186,7 @@ void dcmprs       PARM((char *, char *, int *, int *, NODE *));
 void free_tree    PARM((int *));
 int  free_node    PARM((NODE *, int));
 
-/* global variables                                                 */
+/* global variables */
 
 int                infile;
 FILE               *outfile;
@@ -1176,9 +1178,6 @@ void decompress(ibuf,obuf,nin,nout)
         int        *nin;   /* I         Number of bytes on input buffer     */
         int        *nout;  /* I         Number of bytes in output buffer    */
 {
-  /* The external root pointer to tree */
-  extern NODE *tree;
-
   dcmprs(ibuf,obuf,nin,nout,tree);
 
   return;
@@ -1191,7 +1190,6 @@ void decmpinit(hist)
 *_ARGS  TYPE       NAME      I/O        DESCRIPTION                        */
         int        *hist;  /* I         First-difference histogram.        */
 {
-  extern NODE *tree;          /* Huffman tree root pointer */
   tree = huff_tree(hist);
   return;
 }
@@ -1443,8 +1441,6 @@ void free_tree(nfreed)
 ****************************************************************************/
 {
   int total_free = 0;
-
-  extern NODE *tree;      /* Huffman tree root pointer */
 
   *nfreed = free_node(tree,total_free);
 

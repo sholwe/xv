@@ -39,8 +39,15 @@ static Time  lastEventTime;
 static Cursor dropper = 0, pen = 0, blur = 0;
 
 
+static void SelectDispMB       PARM((int));
+static void Select24to8MB      PARM((int));
+static void SelectRootMB       PARM((int));
+static void SelectWindowMB     PARM((int));
+static void SelectSizeMB       PARM((int));
+
+static void DoPrint            PARM((void));
 static void debugEvent         PARM((XEvent *));
-static char *win2name          PARM((Window));
+static const char *win2name    PARM((Window));
 static void handleButtonEvent  PARM((XEvent *, int *, int *));
 static void handleKeyEvent     PARM((XEvent *, int *, int *));
 static void zoomCurs           PARM((u_int));
@@ -196,6 +203,9 @@ int HandleEvent(event, donep)
 #ifdef HAVE_JPEG
   static int wasJpegUp=0;
 #endif
+#ifdef HAVE_JP2K
+  static int wasJp2kUp=0;
+#endif
 #ifdef HAVE_TIFF
   static int wasTiffUp=0;
 #endif
@@ -283,6 +293,10 @@ int HandleEvent(event, donep)
 
 #ifdef HAVE_JPEG
     if (JPEGCheckEvent(event)) break;   /* event has been processed */
+#endif
+
+#ifdef HAVE_JP2K
+    if (JP2KCheckEvent(event)) break;   /* event has been processed */
 #endif
 
 #ifdef HAVE_TIFF
@@ -436,6 +450,10 @@ int HandleEvent(event, donep)
       else if (client_event->window == jpegW) JPEGDialog(0);
 #endif
 
+#ifdef HAVE_JP2K
+      else if (client_event->window == jp2kW) JP2KDialog(0);
+#endif
+
 #ifdef HAVE_TIFF
       else if (client_event->window == tiffW) TIFFDialog(0);
 #endif
@@ -480,8 +498,10 @@ int HandleEvent(event, donep)
     if (win==ctrlW || win==gamW || win==infoW || win==mainW || win==dirW) {
       XSizeHints hints;
 
+#define BAD_IDEA
+#ifdef BAD_IDEA
       /*
-       * if there's a virtual window manager running (e.g. tvtwm / olvwm),
+       * if there is a virtual window manager running (e.g., tvtwm / olvwm),
        * we're going to get 'cevt' values in terms of the
        * 'real' root window (the one that is the size of the screen).
        * We'll want to translate them into values that are in terms of
@@ -489,7 +509,8 @@ int HandleEvent(event, donep)
        */
 
       if (vrootW != rootW) {
-	int x1,y1;  Window child;
+	int x1,y1;
+	Window child;
 
 	XTranslateCoordinates(theDisp, rootW, vrootW, cevt->x, cevt->y,
 			      &x1, &y1, &child);
@@ -497,6 +518,7 @@ int HandleEvent(event, donep)
 			   cevt->x, cevt->y, x1, y1);
 	cevt->x = x1;  cevt->y = y1;
       }
+#endif
 
 #ifndef VMS
       /* read hints for this window and adjust any position hints, but
@@ -633,11 +655,14 @@ int HandleEvent(event, donep)
 #ifdef HAVE_JPEG
 	if (wasJpegUp) { JPEGDialog(wasJpegUp);  wasJpegUp=0; }
 #endif
+#ifdef HAVE_JP2K
+	if (wasJp2kUp) { JP2KDialog(wasJpegUp);  wasJp2kUp=0; }
+#endif
 #ifdef HAVE_TIFF
 	if (wasTiffUp) { TIFFDialog(wasTiffUp);  wasTiffUp=0; }
 #endif
 #ifdef HAVE_PNG
-	if (wasPngUp)  { PNGDialog(wasJpegUp);   wasPngUp=0; }
+	if (wasPngUp)  { PNGDialog(wasPngUp);    wasPngUp=0; }
 #endif
 #ifdef HAVE_PCD
 	if (wasPcdUp)  { PCDDialog(wasPcdUp);    wasPcdUp=0; }
@@ -681,6 +706,9 @@ int HandleEvent(event, donep)
 	  if (psUp)   { wasPsUp   = psUp;    PSDialog(0); }
 #ifdef HAVE_JPEG
 	  if (jpegUp) { wasJpegUp = jpegUp;  JPEGDialog(0); }
+#endif
+#ifdef HAVE_JP2K
+	  if (jp2kUp) { wasJp2kUp = jp2kUp;  JP2KDialog(0); }
 #endif
 #ifdef HAVE_TIFF
 	  if (tiffUp) { wasTiffUp = tiffUp;  TIFFDialog(0); }
@@ -768,7 +796,7 @@ int HandleEvent(event, donep)
 	Window root_r;
 	Window parent_r;
 	Window *children_r;
-	int nchildren_r;
+	unsigned int nchildren_r;
 	XWindowAttributes xwa;
 
 	parent_r=mainW;
@@ -780,28 +808,37 @@ int HandleEvent(event, donep)
 	  if (children_r!=NULL) {
 	    XFree(children_r);
 	  }
-	} while(parent_r!=root_r);
+	} while (parent_r!=root_r && parent_r!=vrootW);
 	XGetWindowAttributes(theDisp, current, &xwa);
-	debkludge_offx=eWIDE-xwa.width+p_offx;
-	debkludge_offy=eHIGH-xwa.height+p_offy;
+	debkludge_offx = eWIDE-xwa.width+p_offx;
+	debkludge_offy = eHIGH-xwa.height+p_offy;
       }
 
-
+#if 0
+      /* FIXME: if we want to do this, we first have to wait for a configure
+       * notify to avoid a race condition because the location might be in-
+       * correct if the window manager does placement after managing the window.
+       */
       /* move window around a bit... */
       {
 	XWindowAttributes xwa;
+
 	GetWindowPos(&xwa);
+	//fprintf(stderr, "RAC: orig window pos %d,%d\n", xwa.x, xwa.y);
+
 	xwa.width = eWIDE;  xwa.height = eHIGH;
+	//fprintf(stderr, "RAC: image size now %d,%d\n", xwa.width, xwa.height);
 
 	/* try to keep the damned thing on-screen, if possible */
-	if (xwa.x + xwa.width  > dispWIDE) xwa.x = dispWIDE - xwa.width;
-	if (xwa.y + xwa.height > dispHIGH) xwa.y = dispHIGH - xwa.height;
+	if (xwa.x + xwa.width  > vrWIDE) xwa.x = vrWIDE - xwa.width;
+	if (xwa.y + xwa.height > vrHIGH) xwa.y = vrHIGH - xwa.height;
 	if (xwa.x < 0) xwa.x = 0;
 	if (xwa.y < 0) xwa.y = 0;
 
+	//fprintf(stderr, "RAC: moving window to %d,%d\n", xwa.x, xwa.y);
 	SetWindowPos(&xwa);
       }
-
+#endif
     }
   }
     break;
@@ -879,7 +916,7 @@ int HandleEvent(event, donep)
 
 
 /***********************************/
-void SelectDispMB(i)
+static void SelectDispMB(i)
      int i;
 {
   /* called to handle selection of a dispMB item */
@@ -929,7 +966,7 @@ void SelectDispMB(i)
 
 
 /***********************************/
-void SelectRootMB(i)
+static void SelectRootMB(i)
      int i;
 {
   /* called to handle selection of a rootMB item */
@@ -949,7 +986,7 @@ void SelectRootMB(i)
 
 
 /***********************************/
-void Select24to8MB(i)
+static void Select24to8MB(i)
      int i;
 {
   if (i<0 || i>=CONV24_MAX) return;
@@ -992,7 +1029,7 @@ void Select24to8MB(i)
 
 
 /***********************************/
-void SelectWindowMB(i)
+static void SelectWindowMB(i)
      int i;
 {
   if (i<0 || i>=WMB_MAX) return;
@@ -1023,7 +1060,7 @@ void SelectWindowMB(i)
 
 
 /***********************************/
-void SelectSizeMB(i)
+static void SelectSizeMB(i)
      int i;
 {
   int w,h;
@@ -1136,13 +1173,13 @@ void SelectSizeMB(i)
 
 
 /***********************************/
-void DoPrint()
+static void DoPrint()
 {
   /* pops open appropriate dialog boxes, issues print command */
 
-  int          i;
-  char         txt[512], str[PRINTCMDLEN + 10];
-  static char *labels[] = { "\03Color", "\07Grayscale", " B/W", "\033Cancel" };
+  int                i;
+  char               txt[512], str[PRINTCMDLEN + 10];
+  static const char *labels[] = { "\03Color", "\07Grayscale", " B/W", "\033Cancel" };
                           /* ^B ("\02") already used for moving cursor back */
 
   strcpy(txt, "Print:  Enter a command that will read a PostScript file ");
@@ -1232,7 +1269,7 @@ static void debugEvent(e)
   }
 }
 
-static char *win2name(win)
+static const char *win2name(win)
      Window win;
 {
   static char foo[16];
@@ -1287,6 +1324,10 @@ static void handleButtonEvent(event, donep, retvalp)
 
 #ifdef HAVE_JPEG
     if (JPEGCheckEvent(event)) break;
+#endif
+
+#ifdef HAVE_JP2K
+    if (JP2KCheckEvent(event)) break;
 #endif
 
 #ifdef HAVE_TIFF
@@ -1401,14 +1442,14 @@ static void handleButtonEvent(event, donep, retvalp)
 
 	switch (i) {
 	case S_BOK:   if (dirUp == BLOAD) {
-	  if (!DirCheckCD()) {
-	    retval = LOADPIC;
-	    done=1;
+	    if (!DirCheckCD()) {
+	      retval = LOADPIC;
+	      done=1;
+	    }
 	  }
-	}
-	else if (dirUp == BSAVE) {
-	  DoSave();
-	}
+	  else if (dirUp == BSAVE) {
+	    DoSave();
+	  }
 	  break;
 
 	case S_BCANC: DirBox(0);  break;
@@ -1568,6 +1609,10 @@ static void handleKeyEvent(event, donep, retvalp)
     if (JPEGCheckEvent(event)) break;
 #endif
 
+#ifdef HAVE_JP2K
+    if (JP2KCheckEvent(event)) break;
+#endif
+
 #ifdef HAVE_TIFF
     if (TIFFCheckEvent(event)) break;
 #endif
@@ -1621,9 +1666,9 @@ static void handleKeyEvent(event, donep, retvalp)
 
       else if (buf[0] == 'p' && stlen>0) {
 	if (strlen(pageBaseName) && numPages>1) {
-	  int  i,j, okay;
-	  char buf[64], txt[512];
-	  static char *labels[] = { "\nOk", "\033Cancel" };
+	  int                i,j, okay;
+	  char               buf[64], txt[512];
+	  static const char *labels[] = { "\nOk", "\033Cancel" };
 
 	  /* ask what page to go to */
 	  sprintf(txt, "Go to page number...   (1-%d)", numPages);
@@ -1699,9 +1744,11 @@ static void handleKeyEvent(event, donep, retvalp)
 
 
     /* check dir filename arrows */
-    ck = CursorKey(ks, shift, 1);
-    if (key_event->window == dirW && ck==CK_LEFT)  { DirKey('\002'); break; }
-    if (key_event->window == dirW && ck==CK_RIGHT) { DirKey('\006'); break; }
+    if (key_event->window == dirW) {
+      ck = CursorKey(ks, shift, 1);
+      if (ck==CK_LEFT)  { DirKey('\002'); break; }
+      if (ck==CK_RIGHT) { DirKey('\006'); break; }
+    }
 
 
     /* check for preset keys     (meta-1, meta-2, meta-3, meta-4, meta-0)
@@ -1754,6 +1801,33 @@ static void handleKeyEvent(event, donep, retvalp)
       else dealt = 0;
 
       if (dealt) break;
+    }
+
+    /* Check for function keys */
+    if (key_event->window == ctrlW || key_event->window == mainW) {
+      if (ks >= XK_F1 && ks <= XK_F1 + FSTRMAX - 1) {
+        int fkey = ks - XK_F1;
+        if (fkeycmds[fkey] && fullfname[0]) {
+#define CMDLEN 4096
+          char cmd[CMDLEN];
+          /* If a command begins with '@', we do not reload the current file */
+          int noreload = (fkeycmds[fkey][0] == '@');
+          int x = 0, y = 0, w = 0, h = 0;
+          if (HaveSelection())
+            GetSelRCoords(&x, &y, &w, &h);
+          snprintf(cmd, CMDLEN, fkeycmds[fkey] + noreload, fullfname, x, y, w, h);
+#undef CMDLEN
+          if (DEBUG) fprintf(stderr, "Executing '%s'\n", cmd);
+          WaitCursor();
+          system(cmd);
+          SetCursors(-1);
+          if (!noreload) {
+            retval = RELOAD;
+            done = 1;
+          }
+          break;
+        }
+      }
     }
 
     if (!stlen) break;
@@ -1893,9 +1967,9 @@ static void setSizeCmd()
   /* open 'set size' prompt window, get a string, parse it, and try to
      set the window size accordingly */
 
-  int   i, arg1, arg2, numargs, pct1, pct2, state, neww, newh;
-  char  txt[512], buf[64], *sp, ch;
-  static char *labels[] = { "\nOk", "\033Cancel" };
+  int                i, arg1, arg2, numargs, pct1, pct2, state, neww, newh;
+  char               txt[512], buf[64], *sp, ch;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
 
   sprintf(txt, "Enter new image display size (ex. '400 x 300'),\n");
   strcat (txt, "expansion ratio (ex. '75%'),\n");
@@ -2070,12 +2144,14 @@ void WResize(w,h)
     return;
   }
 
+  GetWindowPos(&xwa);
+
   /* determine if new size goes off edge of screen.  if so move window so it
      doesn't go off screen */
-
-  GetWindowPos(&xwa);
   if (xwa.x + w > vrWIDE) xwa.x = vrWIDE - w;
   if (xwa.y + h > vrHIGH) xwa.y = vrHIGH - h;
+  if (xwa.x < 0) xwa.x = 0;
+  if (xwa.y < 0) xwa.y = 0;
 
   if (DEBUG) fprintf(stderr,"%s: resizing window to %d,%d at %d,%d\n",
 		     cmd,w,h,xwa.x,xwa.y);
@@ -2199,11 +2275,12 @@ void WUnCrop()
       xwa.y = origcropy;
     }
 
-    if (xwa.x + w > vrWIDE) xwa.x = vrWIDE - w;   /* keep on screen */
+    /* keep on screen */
+    if (xwa.x + w > vrWIDE) xwa.x = vrWIDE - w;
     if (xwa.y + h > vrHIGH) xwa.y = vrHIGH - h;
+    if (xwa.x < 0) xwa.x = 0;
+    if (xwa.y < 0) xwa.y = 0;
 
-    if (xwa.x<0) xwa.x = 0;
-    if (xwa.y<0) xwa.y = 0;
     xwa.width = w;  xwa.height = h;
 
     if (!useroot) {
@@ -2253,6 +2330,7 @@ XWindowAttributes *xwa;
   if (xwa->height < dispHIGH && xwc.y < p_offy) xwc.y = p_offy;
 
   /* Try to keep bottom right decorations inside */
+#ifdef CRAP
   if (xwc.x+eWIDE-debkludge_offx>dispWIDE) {
     xwc.x=dispWIDE-eWIDE+debkludge_offx;
     if (xwc.x<0) xwc.x=0;
@@ -2261,11 +2339,21 @@ XWindowAttributes *xwa;
     xwc.y=dispHIGH-eHIGH+debkludge_offy;
     if (xwc.y<0) xwc.y=0;
   }
+#else
+  if (xwc.x+eWIDE+p_offx>dispWIDE) {
+    xwc.x=dispWIDE-(eWIDE+debkludge_offx);
+    if (xwc.x<0) xwc.x=0;
+  }
+  if (xwc.y+eHIGH+p_offy>dispHIGH) {
+    xwc.y=dispHIGH-(eHIGH+debkludge_offy);
+    if (xwc.y<0) xwc.y=0;
+  }
+#endif
 
   xwc.width  = xwa->width;
   xwc.height = xwa->height;
 
-
+#define BAD_IDEA
 #ifdef BAD_IDEA
   /* if there is a virtual window manager running, then we should translate
      the coordinates that are in terms of 'real' screen into coordinates
@@ -2275,9 +2363,10 @@ XWindowAttributes *xwa;
   if (vrootW != rootW) { /* virtual window manager running */
     int x1,y1;
     Window child;
-    XTranslateCoordinates(theDisp, rootW, vrootW,xwc.x,xwc.y,&x1,&y1,&child);
+
+    XTranslateCoordinates(theDisp, rootW, vrootW, xwc.x, xwc.y, &x1, &y1, &child);
     if (DEBUG) fprintf(stderr,"SWP: translate: %d,%d -> %d,%d\n",
-		       xwc.x,xwc.y,x1,y1);
+		       xwc.x, xwc.y, x1, y1);
     xwc.x = x1;  xwc.y = y1;
   }
 #endif
@@ -2363,7 +2452,7 @@ static void TrackPicValues(mx,my)
   u_long       wh, bl;
   int          ty, w, ecol, done1;
   char         foo[128];
-  char         *str  =
+  const char   *str  =
    "8888,8888 = 123,123,123  #123456  (123,123,123 HSV)  [-2345,-2345]";
 
   ecol = 0;  wh = infobg;  bl = infofg;
@@ -2601,6 +2690,10 @@ static void onInterrupt(i)
 
 #ifdef HAVE_JPEG
   if (jpegUp) JPEGDialog(0);  /* close jpeg window */
+#endif
+
+#ifdef HAVE_JP2K
+  if (jp2kUp) JP2KDialog(0);  /* close jpeg 2000 window */
 #endif
 
 #ifdef HAVE_TIFF
@@ -3163,11 +3256,11 @@ static void blurPixel(x,y)
 /***********************/
 static void annotatePic()
 {
-  int          i, w,h, len;
-  byte        *cimg;
-  char         txt[256];
-  static char  buf[256] = {'\0'};
-  static char *labels[] = {"\nOk", "\033Cancel" };
+  int                i, w,h, len;
+  byte              *cimg;
+  char               txt[256];
+  static char        buf[256] = {'\0'};
+  static const char *labels[] = {"\nOk", "\033Cancel" };
 
   sprintf(txt, "Image Annotation:\n\n%s",
 	  "Enter string to be placed on image.");

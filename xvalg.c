@@ -53,7 +53,7 @@ static void intsort        PARM((int *, int));
 static int  start24bitAlg  PARM((byte **, byte **));
 static void end24bitAlg    PARM((byte *, byte *));
 
-static void printUTime     PARM((char *));
+static void printUTime     PARM((const char *));
 
 static byte *origPic = (byte *) NULL;
 static int  origPicType;
@@ -70,10 +70,11 @@ static byte origrmap[256], origgmap[256], origbmap[256];
 
 /***************************/
 static void printUTime(str)
-     char *str;
+     const char *str;
 {
 #ifdef TIMING_TEST
-  int i;  struct rusage ru;
+  int i;
+  struct rusage ru;
 
   i = getrusage(RUSAGE_SELF, &ru);
   fprintf(stderr,"%s: utime = %d.%d seconds\n",
@@ -164,11 +165,11 @@ static void Blur()
 
      Note that 'n' must be odd for things to work properly */
 
-  byte        *pic24, *tmpPic;
-  int          i, sx,sy,sw,sh, n;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         txt[256];
-  static char  buf[64] = { '3', '\0' };
+  byte              *pic24, *tmpPic;
+  int                i, sx,sy,sw,sh, n;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               txt[256];
+  static char        buf[64] = { '3', '\0' };
 
   sprintf(txt, "Blur:                                   \n\n%s",
 	  "Enter mask size (ex. 3, 5, 7, ...)");
@@ -207,11 +208,11 @@ static void Sharpen()
 {
   /* runs an edge-enhancment algorithm */
 
-  byte        *pic24, *tmpPic;
-  int          i, sx,sy,sw,sh, n;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         txt[256];
-  static char  buf[64] = { '7', '5', '\0' };
+  byte              *pic24, *tmpPic;
+  int                i, sx,sy,sw,sh, n;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               txt[256];
+  static char        buf[64] = { '7', '5', '\0' };
 
   sprintf(txt, "Sharpen:                                   \n\n%s",
 	  "Enter enhancement factor (0-99%)");
@@ -248,7 +249,7 @@ static void Sharpen()
 static void EdgeDetect()
 {
   byte *pic24, *p24, *tmpPic, *tlp;
-  char *str;
+  const char *str;
   int  i, j, v, maxv, sx,sy,sw,sh;
 
   WaitCursor();
@@ -293,7 +294,7 @@ static void EdgeDetect()
 static void TinFoil()
 {
   byte *pic24, *tmpPic, *tp, *tlp;
-  char *str;
+  const char *str;
   int  i, j, v, sx,sy,sw,sh;
 
   WaitCursor();
@@ -381,12 +382,12 @@ static void Blend()
 static void FineRotate(clr)
      int clr;
 {
-  byte        *pic24, *tmpPic;
-  int          i,sx,sy,sw,sh;
-  double       rotval;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         txt[256];
-  static char  buf[64] = { '\0' };
+  byte              *pic24, *tmpPic;
+  int                i,sx,sy,sw,sh;
+  double             rotval;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               txt[256];
+  static char        buf[64] = { '\0' };
 
   sprintf(txt, "Rotate (%s):\n\nEnter rotation angle, in degrees:  (>0 = CCW)",
 	  (clr ? "Clear" : "Copy"));
@@ -416,11 +417,11 @@ static void FineRotate(clr)
 /************************/
 static void Pixelize()
 {
-  byte        *pic24, *tmpPic;
-  int          i,sx,sy,sw,sh, pixX,pixY,err;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         txt[256];
-  static char  buf[64] = { '4', '\0' };
+  byte              *pic24, *tmpPic;
+  int                i,sx,sy,sw,sh, pixX,pixY,err;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               txt[256];
+  static char        buf[64] = { '4', '\0' };
 
   sprintf(txt, "Pixelize:\n\nEnter new pixel size, in image pixels:  %s",
 	  "(ex. '3', '5x8')");
@@ -463,11 +464,11 @@ static void Pixelize()
 /************************/
 static void Spread()
 {
-  byte        *pic24, *tmpPic;
-  int          i,sx,sy,sw,sh, pixX,pixY,err;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         txt[256];
-  static char  buf[64] = { '5', '\0' };
+  byte              *pic24, *tmpPic;
+  int                i,sx,sy,sw,sh, pixX,pixY,err;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               txt[256];
+  static char        buf[64] = { '5', '\0' };
 
   sprintf(txt, "Spread:\n\nEnter spread factor (or x,y factors):  %s",
 	  "(ex. '10', '1x5')");
@@ -516,11 +517,11 @@ static void MedianFilter()
   /* runs median filter algorithm (for n*n rect centered around each pixel,
      replace with median value */
 
-  byte        *pic24, *tmpPic;
-  int          i, sx,sy,sw,sh, n;
-  static char *labels[] = { "\nOk", "\033Cancel" };
-  char         txt[256];
-  static char  buf[64] = { '3', '\0' };
+  byte              *pic24, *tmpPic;
+  int                i, sx,sy,sw,sh, n;
+  static const char *labels[] = { "\nOk", "\033Cancel" };
+  char               txt[256];
+  static char        buf[64] = { '3', '\0' };
 
   sprintf(txt, "DeSpeckle (median filter):                          \n\n%s",
 	  "Enter mask size (ex. 3, 5, 7, ...)");

@@ -55,7 +55,7 @@ static void char_out    PARM((int));
 static void flush_char  PARM((void));
 
 
-static byte pc2nc[256],r1[256],g1[256],b1[256];
+static byte pc2nc[256];
 
 
 /*************************************************************/
@@ -73,7 +73,8 @@ int WriteGIF(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols, colorstyle,
   int   ColorMapSize, InitCodeSize, Background, BitsPerPixel;
   int   i,j,nc;
   byte *pic8;
-  byte  rtemp[256],gtemp[256],btemp[256];
+  byte  rtemp[256],gtemp[256],btemp[256];  /* for 24-bit to 8-bit conversion */
+  byte  r1[256],g1[256],b1[256];           /* for duplicated-color remapping */
 
   if (ptype == PIC24) {  /* have to quantize down to 8 bits */
     pic8 = Conv24to8(pic, w, h, 256, rtemp,gtemp,btemp);

@@ -56,3 +56,51 @@
  * The author may not be contacted by (voice) phone.  Please don't try.
  *
  */
+
+/*
+ * Portions copyright 2000-2007 by Greg Roelofs and contributors:
+ *
+ *   Andrey A. Chernov [ache]
+ *     (http://cvsweb.freebsd.org/ports/graphics/xv/files/patch-ab)
+ *   Andreas Dilger (adilger clusterfs.com)
+ *   Alexander Lehmann (lehmann usa.net)
+ *   Alexey Spiridonov (http://www-math.mit.edu/~lesha/)
+ *   Anthony Thyssen (http://www.cit.gu.edu.au/~anthony/)
+ *   Bruno Rohee (http://bruno.rohee.com/)
+ *   David A. Clunie (http://www.dclunie.com/xv-pcd.html)
+ *   Erling A. Jacobsen (linuxcub email.dk)
+ *   Egmont Koblinger (egmont users.sourceforge.net)
+ *   Fabian Greffrath (fabian debian-unofficial.org)
+ *   Greg Roelofs (http://pobox.com/~newt/greg_contact.html)
+ *   Guido Vollbeding (http://sylvana.net/guido/)
+ *   IKEMOTO Masahiro (ikeyan airlab.cs.ritsumei.ac.jp)
+ *   John Cooper (john.cooper third-harmonic.com)
+ *   John C. Elliott (http://www.seasip.demon.co.uk/ZX/zxdload.html)
+ *   John D. Baker (http://mylinuxisp.com/~jdbaker/)
+ *   Jörgen Grahn (jgrahn algonet.se)
+ *   John H. Bradley, of course (http://www.trilon.com/xv/)
+ *   Jean-Pierre Demailly (http://www-fourier.ujf-grenoble.fr/~demailly/)
+ *   John Rochester (http://www.freebsd.org/cgi/query-pr.cgi?pr=2920)
+ *   (also http://cvsweb.freebsd.org/ports/graphics/xv/files/patch-af, -ag)
+ *   James Roberts Kirkpatrick (uwyo.edu)
+ *   Joe Zbiciak (http://spatula-city.org/~im14u2c/)
+ *   Kyoichiro Suda (http://www.coara.or.jp/~sudakyo/XV_jp.html)
+ *   Landon Curt "chongo" Noll (http://www.isthe.com/chongo/)
+ *   Larry Jones (lawrence.jones ugs.com)
+ *   Peter Jordan (http://www.ibiblio.org/pub/Linux/apps/graphics/viewers/X/)
+ *   Pawel S. Veselov (http://manticore.2y.net/wbmp.html)
+ *   Ross Combs (rocombs cs.nmsu.edu)
+ *   Robin Humble (http://www.cita.utoronto.ca/~rjh/)
+ *   Sean Borman (http://www.nd.edu/~sborman/software/xvwheelmouse.html)
+ *   TenThumbs (tenthumbs cybernex.net)
+ *   Scott B. Marovich (formerly marovich hpl.hp.com)
+ *   Tim Adye (http://hepwww.rl.ac.uk/Adye/xv-psnewstyle.html)
+ *   Tim Ramsey (tar pobox.com)
+ *   Tetsuya INOUE (tin329 chino.it.okayama-u.ac.jp)
+ *   Tavis Ormandy (taviso gentoo.org)
+ *   Werner Fink (http://www.suse.de/~werner/)
+ *
+ * Other credits are as listed on the XV Downloads page or in the respective
+ * patches (e.g., the jp-extension patches or within the PNG patch).
+ *
+ */

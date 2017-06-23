@@ -8,8 +8,8 @@
  *                             maps/unmaps window, etc.
  *   RedrawInfo(x,y,w,h)    -  called by 'expose' events
  *   SetInfoMode(mode)      -  changes amount of info Info window shows
- *   SetISTR(st, fmt, args) - sprintf's into ISTR #st.  Redraws it in window
- *   char *GetISTR(st)      - returns pointer to ISTR #st, or NULL if st bogus
+ *   SetISTR(st, fmt, args) -  sprintf's into ISTR #st.  Redraws it in window
+ *   char *GetISTR(st)      -  returns pointer to ISTR #st, or NULL if st bogus
  */
 
 #include "copyright.h"
@@ -43,7 +43,7 @@ static void redrawString  PARM((int));
 
 /***************************************************/
 void CreateInfo(geom)
-char *geom;
+     const char *geom;
 {
   infoW = CreateWindow("xv info", "XVinfo", geom, INFOWIDE, INFOHIGH,
 		       infofg, infobg, 0);
@@ -86,8 +86,8 @@ void RedrawInfo(x,y,w,h)
 	    36 - pennnet_height/2);
 
   /* draw the credits */
-  sprintf(str,"XV   -   %s",REVDATE);
-  CenterString(infoW, INFOWIDE/2, 36-LINEHIGH, str);
+  snprintf(dummystr, sizeof(dummystr), "XV   -   %s", REVDATE);
+  CenterString(infoW, INFOWIDE/2, 36-LINEHIGH, dummystr);
   CenterString(infoW, INFOWIDE/2, 36,
 	       "by John Bradley  (bradley@dccs.upenn.edu)");
   CenterString(infoW, INFOWIDE/2, 36+LINEHIGH,
@@ -131,8 +131,8 @@ static void drawStrings()
 static void drawFieldName(fnum)
      int fnum;
 {
-  static char *fname[7] = { "Filename:", "Format:", "Resolution:", "Cropping:",
-			    "Expansion:", "Selection:", "Colors:" };
+  static const char *fname[7] = { "Filename:", "Format:", "Resolution:",
+	"Cropping:", "Expansion:", "Selection:", "Colors:" };
 
   XSetForeground(theDisp, theGC, infofg);
   XSetBackground(theDisp, theGC, infobg);
@@ -175,7 +175,7 @@ static void redrawString(st)
 		   (u_int) INFOWIDE-STLEFT, (u_int) LINEHIGH);
     XSetForeground(theDisp, theGC, infofg);
     XDrawString(theDisp, infoW, theGC, STLEFT,
-		TOPBASE	+ (st-ISTR_FILENAME)*LINEHIGH,	istrs[st],
+		TOPBASE + (st-ISTR_FILENAME)*LINEHIGH, istrs[st],
 		(int) strlen(istrs[st]));
   }
 }
@@ -233,14 +233,14 @@ va_dcl
 
   if (stnum>=0 && stnum < NISTR) {
     fmt = va_arg(args, char *);
-    if (fmt) vsprintf(istrs[stnum], fmt, args);
+    if (fmt) vsnprintf(istrs[stnum], sizeof(istrs[stnum]), fmt, args);
     else istrs[stnum][0] = '\0';
   }
   va_end(args);
 
   if (stnum == ISTR_COLOR) {
-    sprintf(istrs[ISTR_INFO], "%s  %s  %s", formatStr,
-	    (picType==PIC8) ? "8-bit mode." : "24-bit mode.",
+    snprintf(istrs[ISTR_INFO], sizeof(istrs[ISTR_INFO]), "%s  %s  %s",
+	    formatStr, (picType==PIC8) ? "8-bit mode." : "24-bit mode.",
 	    istrs[ISTR_COLOR]);
   }
 

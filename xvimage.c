@@ -2091,9 +2091,9 @@ XImage *Pic8ToXImage(pic8, wide, high, xcolors, rmap, gmap, bmap)
     /*********************************/
 
   default:
-    sprintf(str,"no code to handle this display type (%d bits deep)",
+    sprintf(dummystr,"no code to handle this display type (%d bits deep)",
 	    dispDEEP);
-    FatalError(str);
+    FatalError(dummystr);
     break;
   }
 
