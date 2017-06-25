@@ -711,7 +711,7 @@ int WritePNG(fp, pic, ptype, w, h, rmap, gmap, bmap, numcols)
     text->key = "Software";
     text->text = software;
     text->text_length = strlen(text->text);
-    text->lang = NULL;
+   // text->lang = NULL;
 
     /*
      * info_ptr->max_text = 1;
